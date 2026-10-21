@@ -56,7 +56,18 @@ async function chargerLocaux() {
 const PRESTIGE = { 1: "modeste", 2: "honorable", 3: "remarquable" };
 const DISCRETION = { 1: "très exposé", 2: "ordinaire", 3: "très discret" };
 function blocAnnonce(l, avecChoix) {
-  const corps = `
+  const photos = l.photos || [];
+  const galerie = photos.length ? `
+      <div class="galerie">
+        <button type="button" class="galerie-principale" data-agrandir aria-label="Agrandir la photo">
+          <img src="${esc(photos[0])}" alt="${esc(l.titre)}, photo 1" loading="lazy">
+        </button>
+        ${photos.length > 1 ? `<div class="galerie-vignettes">${photos.map((p, i) => `
+          <button type="button" class="galerie-vignette" data-photo="${esc(p)}" aria-label="Photo ${i + 1}" aria-pressed="${i === 0}">
+            <img src="${esc(p)}" alt="" loading="lazy">
+          </button>`).join("")}</div>` : ""}
+      </div>` : "";
+  const corps = `${galerie}
       <div class="annonce-tete">
         <h3>${esc(l.titre)}</h3>
         <span class="loyer">${dollars(l.loyer_hebdo)} <small>par semaine</small></span>
@@ -393,5 +404,28 @@ async function vueMJ() {
     vueMJ();
   });
 }
+
+/* ---------- Galerie photo des annonces ---------- */
+const visionneuse = document.getElementById("visionneuse");
+document.addEventListener("click", (ev) => {
+  const vignette = ev.target.closest(".galerie-vignette");
+  if (vignette) {
+    ev.preventDefault();
+    const galerie = vignette.closest(".galerie");
+    galerie.querySelector(".galerie-principale img").src = vignette.dataset.photo;
+    galerie.querySelectorAll(".galerie-vignette").forEach((v) => v.setAttribute("aria-pressed", String(v === vignette)));
+    return;
+  }
+  const principale = ev.target.closest("[data-agrandir]");
+  if (principale) {
+    ev.preventDefault();
+    const img = principale.querySelector("img");
+    visionneuse.querySelector("img").src = img.src;
+    visionneuse.querySelector("img").alt = img.alt;
+    visionneuse.showModal();
+    return;
+  }
+  if (ev.target === visionneuse || ev.target.closest("[data-fermer]")) visionneuse.close();
+});
 
 demarrer().catch(afficherPanne);
