@@ -136,7 +136,7 @@ function lettreAccueil() {
         <span class="expediteur">Calloway &amp; Sons</span>
         <span>Gary, le ${dateLongue(new Date())}</span>
       </div>
-      <p>Chère amie,</p>
+      <p>Cher Monsieur Visconti,</p>
       <p>Il est rare que la Maison ouvre ses registres à un nouveau compte. Il est plus rare encore qu'elle le fasse sans avoir jamais rencontré la personne concernée. Vous comprendrez donc le poids que nous accordons à la recommandation de <strong>M. Victor Vance</strong>, qui a bien voulu répondre de vous.</p>
       <p>Sur sa garantie, nous sommes disposés à vous consentir une ligne de crédit destinée à constituer la cave de votre cercle. Nos fournisseurs vous proposeront chaque semaine une sélection de leurs références ; vous règlerez nos factures sur les recettes de vos soirées, au rythme qui convient à une maison sérieuse.</p>
       <p>Vous trouverez ci-dessous l'accord qui lie les trois parties. Je vous invite à le lire avec attention avant de le signer.</p>
@@ -151,22 +151,22 @@ function texteContrat(c, signe) {
   return `
     <article class="feuille" id="contrat">
       <h2>Accord de garantie et d'ouverture de compte</h2>
-      <p class="clause-discrete">Entre Calloway &amp; Sons, négociants (« la Maison »), M. Victor Vance, de la Vance Fiduciary Trust (« le Garant »), et la titulaire du présent compte (« la Titulaire »).</p>
-      <p class="article"><strong>Article 1.</strong> La Maison ouvre au nom de la Titulaire une ligne de crédit fournisseur de ${dollars(c.ligne_credit)}, exclusivement destinée à l'acquisition de spiritueux auprès des fournisseurs de la Maison.</p>
-      <p class="article"><strong>Article 2.</strong> Les factures sont réglées sur les recettes du cercle de la Titulaire. Un relevé est arrêté chaque mardi à dix-neuf heures.</p>
-      <p class="article"><strong>Article 3.</strong> Le Garant répond envers la Maison de l'ensemble des engagements de la Titulaire.</p>
-      <p class="article"><strong>Article 4.</strong> En reconnaissance de sa garantie, la Titulaire accorde au Garant une courtoisie, dont la nature sera précisée par le Garant en temps opportun. La Titulaire s'engage à l'honorer de bonne grâce.</p>
+      <p class="clause-discrete">Entre Calloway &amp; Sons, négociants (« la Maison »), M. Victor Vance, de la Vance Fiduciary Trust (« le Garant »), et le titulaire du présent compte (« le Titulaire »).</p>
+      <p class="article"><strong>Article 1.</strong> La Maison ouvre au nom du Titulaire une ligne de crédit fournisseur de ${dollars(c.ligne_credit)}, exclusivement destinée à l'acquisition de spiritueux auprès des fournisseurs de la Maison.</p>
+      <p class="article"><strong>Article 2.</strong> Les factures sont réglées sur les recettes du cercle du Titulaire. Un relevé est arrêté chaque mardi à dix-neuf heures.</p>
+      <p class="article"><strong>Article 3.</strong> Le Garant répond envers la Maison de l'ensemble des engagements du Titulaire.</p>
+      <p class="article"><strong>Article 4.</strong> En reconnaissance de sa garantie, le Titulaire accorde au Garant une courtoisie, dont la nature sera précisée par le Garant en temps opportun. Le Titulaire s'engage à l'honorer de bonne grâce.</p>
       <p class="article"><strong>Article 5.</strong> En cas de manquement répété aux présentes, le Garant se réserve d'en examiner personnellement les conditions de règlement.</p>
       <p class="article"><strong>Article 6.</strong> Les parties s'engagent à la plus entière discrétion sur l'existence et les termes du présent accord.</p>
       ${signe ? `
         <div class="signature-bloc">
           <div class="plume">${esc(c.signature)}</div>
-          <div class="qualite">Pour la Titulaire, signé le ${dateLongue(c.contrat_signe_le)}</div>
+          <div class="qualite">Pour le Titulaire, signé le ${dateLongue(c.contrat_signe_le)}</div>
         </div>
         <div class="sceau ${etat.sceauAAnimer ? "appose" : ""}" aria-label="Sceau du Garant">V</div>
       ` : `
         <form id="form-signature" class="signature-bloc">
-          <label for="signature">Signature de la Titulaire</label>
+          <label for="signature">Signature du Titulaire</label>
           <input id="signature" class="saisie-plume" type="text" maxlength="120" autocomplete="off" required>
           <div class="actions"><button class="bouton" type="submit">Signer l'accord</button></div>
           <p class="erreur" id="erreur"></p>
