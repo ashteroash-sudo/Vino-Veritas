@@ -359,6 +359,7 @@ async function vueMJ() {
     <div class="onglets" role="tablist">
       <button class="onglet" role="tab" data-onglet="coulisses" aria-selected="${etat.ongletMJ === "coulisses"}">Coulisses</button>
       <button class="onglet" role="tab" data-onglet="joueuse" aria-selected="${etat.ongletMJ === "joueuse"}">Vue de la joueuse</button>
+      <button class="onglet" role="tab" data-onglet="personnel" aria-selected="${etat.ongletMJ === "personnel"}">Personnel</button>
     </div>
     <div id="contenu-mj"></div>`;
   app.querySelectorAll(".onglet").forEach((b) => b.addEventListener("click", async () => {
@@ -368,6 +369,7 @@ async function vueMJ() {
   }));
   const cible = app.querySelector("#contenu-mj");
   if (etat.ongletMJ === "joueuse") return vueJoueuse(cible);
+  if (etat.ongletMJ === "personnel") return vuePersonnelMJ(cible);
 
   const c = etat.cercle;
   const [journal, locaux] = await Promise.all([chargerJournal(), chargerLocaux()]);
@@ -404,6 +406,58 @@ async function vueMJ() {
     vueMJ();
   });
 }
+
+/* ---------- Fiches du personnel (MJ) ---------- */
+const POSTES = { hote: "Hôtes et hôtesses d'accueil", serveur: "Serveurs et serveuses", barman: "Barmen et sommeliers", portier: "Portiers" };
+const NIVEAUX = { 1: "Débutant", 2: "Confirmé", 3: "D'exception" };
+
+async function vuePersonnelMJ(cible) {
+  cible.innerHTML = `<p class="chargement">Ouverture des dossiers…</p>`;
+  const [{ data: pers, error: e1 }, { data: mj, error: e2 }] = await Promise.all([
+    sb.from("personnel").select("*").order("ordre"),
+    sb.from("personnel_mj").select("*"),
+  ]);
+  if (e1 || e2) { cible.innerHTML = `<p class="erreur">${esc(messageErreur(e1 || e2))}</p>`; return; }
+  const parSlug = Object.fromEntries(mj.map((m) => [m.slug, m]));
+  cible.innerHTML = `
+    <section class="feuille">
+      <h1>Personnel</h1>
+      <p class="badge-mj">Visible uniquement par le MJ. Les fiches d'exception n'apparaîtront aux candidatures de Vito qu'à partir de 60 de standing.</p>
+      <p class="clause-discrete">Pour chaque portrait : copie la description dans ton générateur d'images, puis envoie-moi l'image en précisant le nom du fichier indiqué.</p>
+      ${Object.entries(POSTES).map(([poste, titre]) => `
+        <h2 class="poste-titre">${titre}</h2>
+        ${pers.filter((p) => p.poste === poste).map((p) => ficheMJ(p, parSlug[p.slug] || {})).join("")}
+      `).join("")}
+    </section>`;
+}
+
+function ficheMJ(p, m) {
+  return `
+    <article class="fiche-perso">
+      <div class="portrait">
+        <img src="img/personnel/${esc(p.slug)}.jpg" alt="Portrait de ${esc(p.nom)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'portrait-vide',textContent:'Portrait à venir'}))">
+      </div>
+      <div class="fiche-texte">
+        <h3>${esc(p.nom)}, ${p.age} ans</h3>
+        <div class="origine">${NIVEAUX[p.niveau]}, ${dollars(p.salaire_hebdo)} par semaine. Trait : ${esc(p.trait)}</div>
+        <p>${esc(p.presentation)}</p>
+        ${m.secret ? `<p class="secret"><strong>Secret :</strong> ${esc(m.secret)}</p>` : ""}
+        <details class="prompt">
+          <summary>Description pour le portrait (fichier ${esc(p.slug)}.jpg)</summary>
+          <p class="prompt-texte">${esc(m.prompt || "")}</p>
+          <button type="button" class="bouton-second copier" data-copier="${esc(m.prompt || "")}">Copier la description</button>
+        </details>
+      </div>
+    </article>`;
+}
+
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-copier]");
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copier); b.textContent = "Copié"; }
+  catch { b.textContent = "Copie impossible, sélectionne le texte"; }
+  setTimeout(() => { b.textContent = "Copier la description"; }, 1800);
+});
 
 /* ---------- Galerie photo des annonces ---------- */
 const visionneuse = document.getElementById("visionneuse");
