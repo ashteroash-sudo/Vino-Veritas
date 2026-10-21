@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carte de visite — Calloway &amp; Sons</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Pinyon+Script&family=Spectral:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cuir: #1d2a23; --laiton: #b8935a; --laiton-pale: #d8bf8f;
+      --registre: #ece4cf; --encre: #24201a; --encre-pale: #5d5446; --sceau: #7b2228;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: #3a3a36; color: var(--laiton-pale);
+      font-family: "Spectral", Georgia, serif; padding: 24px 16px;
+    }
+    .consignes { max-width: 640px; margin: 0 auto 24px; font-size: .95rem; line-height: 1.5; }
+    .consignes h1 { font-family: "IM Fell English", serif; font-weight: 400; color: var(--laiton); margin: 0 0 6px; }
+    .consignes form { display: grid; gap: 8px; margin-top: 12px; }
+    .consignes input { font: inherit; padding: 6px 8px; width: 100%; }
+    .consignes button { font: inherit; padding: 8px 14px; background: var(--sceau); color: var(--registre); border: none; cursor: pointer; justify-self: start; }
+    .planche { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; }
+
+    .carte {
+      width: 85mm; height: 55mm; position: relative; overflow: hidden;
+      box-shadow: 0 10px 24px rgba(0,0,0,.45);
+    }
+    /* Recto : cuir et laiton */
+    .recto {
+      background: var(--cuir); color: var(--laiton);
+      display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+      border: 1.2mm solid var(--cuir);
+      outline: .3mm solid var(--laiton); outline-offset: -3mm;
+    }
+    .recto .nom { font-family: "IM Fell English", serif; font-size: 7.4mm; line-height: 1; }
+    .recto .metier { font-style: italic; font-size: 2.9mm; color: var(--laiton-pale); margin-top: 1.6mm; }
+    .recto .filet { width: 18mm; height: .25mm; background: var(--laiton); margin: 2.6mm 0; }
+    .recto .lieu { font-size: 2.5mm; color: var(--laiton-pale); }
+
+    /* Verso : papier, QR, recommandation manuscrite */
+    .verso {
+      background: var(--registre); color: var(--encre);
+      display: grid; grid-template-columns: 26mm 1fr; gap: 4mm; align-items: center;
+      padding: 5mm;
+    }
+    .verso #qr svg { width: 26mm; height: 26mm; display: block; }
+    .verso .acces { font-family: "IM Fell English", serif; font-size: 3.6mm; line-height: 1.15; }
+    .verso .sous { font-size: 2.3mm; font-style: italic; color: var(--encre-pale); margin-top: 1mm; }
+    .verso .mot { font-family: "Pinyon Script", cursive; font-size: 4.6mm; color: #1f2a4a; margin-top: 2.4mm; line-height: 1.15; }
+    .verso .ids { font-size: 2.3mm; margin-top: 2mm; color: var(--encre-pale); }
+    .verso .ids span { font-family: "Pinyon Script", cursive; font-size: 3.6mm; color: #1f2a4a; }
+
+    @media print {
+      @page { size: A4; margin: 15mm; }
+      body { background: none; padding: 0; }
+      .consignes { display: none; }
+      .carte { box-shadow: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .planche { justify-content: flex-start; gap: 8mm; }
+    }
+  </style>
+</head>
+<body>
+  <section class="consignes">
+    <h1>Carte de visite</h1>
+    <p>Recto et verso au format standard (85 × 55 mm). Le QR code mène au portail de la Maison. Si tu veux que les identifiants de la joueuse soient écrits « à la main » au dos, renseigne-les ici, sinon laisse vide et donne-les-lui autrement. Imprime ensuite avec Ctrl+P (couleurs d'arrière-plan activées), ou fais une capture d'écran pour l'envoyer en image.</p>
+    <form id="form-ids">
+      <input name="email" type="text" placeholder="Adresse de connexion de la joueuse (facultatif)">
+      <input name="code" type="text" placeholder="Code d'accès (facultatif)">
+      <button type="submit">Mettre à jour la carte</button>
+    </form>
+  </section>
+
+  <div class="planche">
+    <div class="carte recto">
+      <div class="nom">Calloway &amp; Sons</div>
+      <div class="metier">Négociants en spiritueux fins</div>
+      <div class="filet"></div>
+      <div class="lieu">Gary, Indiana, depuis 1921</div>
+    </div>
+    <div class="carte verso">
+      <div id="qr" aria-label="QR code vers le portail"></div>
+      <div>
+        <div class="acces">Accès professionnel</div>
+        <div class="sous">Sur recommandation uniquement</div>
+        <div class="mot">De ma part. V.V.</div>
+        <div class="ids" id="ids"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script>
+    const portail = location.origin + "/";
+    const qr = qrcode(0, "M");
+    qr.addData(portail);
+    qr.make();
+    document.getElementById("qr").innerHTML = qr.createSvgTag({ margin: 0, scalable: true });
+    // Encre du QR assortie au papier
+    document.querySelectorAll("#qr path").forEach(p => p.setAttribute("fill", "#24201a"));
+    document.querySelectorAll("#qr rect").forEach(r => r.setAttribute("fill", "#ece4cf"));
+
+    const params = new URLSearchParams(location.search);
+    const esc = s => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    function majIds(email, code) {
+      const lignes = [];
+      if (email) lignes.push(`Identifiant : <span>${esc(email)}</span>`);
+      if (code) lignes.push(`Code : <span>${esc(code)}</span>`);
+      document.getElementById("ids").innerHTML = lignes.join("<br>");
+    }
+    const f = document.getElementById("form-ids");
+    f.email.value = params.get("email") || "";
+    f.code.value = params.get("code") || "";
+    majIds(f.email.value, f.code.value);
+    f.addEventListener("submit", e => {
+      e.preventDefault();
+      majIds(f.email.value.trim(), f.code.value.trim());
+    });
+  </script>
+</body>
+</html>

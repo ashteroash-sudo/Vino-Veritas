@@ -1,0 +1,264 @@
+:root {
+  --cuir: #1d2a23;        /* cuir vert bouteille du bureau */
+  --cuir-clair: #2a3b31;
+  --laiton: #b8935a;
+  --laiton-pale: #d8bf8f;
+  --registre: #ece4cf;    /* papier des documents */
+  --registre-ombre: #d9cdae;
+  --encre: #24201a;
+  --encre-pale: #5d5446;
+  --sceau: #7b2228;
+  --ok: #3f5e3a;
+  --serif-titre: "IM Fell English", Georgia, serif;
+  --serif: "Spectral", Georgia, serif;
+  --plume: "Pinyon Script", cursive;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(184,147,90,.10), transparent 60%),
+    var(--cuir);
+  color: var(--laiton-pale);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+/* ---------- Enseigne ---------- */
+.enseigne {
+  text-align: center;
+  padding: 36px 16px 20px;
+}
+.enseigne-nom {
+  font-family: var(--serif-titre);
+  font-size: clamp(2rem, 6vw, 3rem);
+  color: var(--laiton);
+  line-height: 1.1;
+}
+.enseigne-sous {
+  font-style: italic;
+  color: var(--laiton-pale);
+  opacity: .75;
+  font-size: .95rem;
+  margin-top: 4px;
+}
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 8px 16px 48px;
+}
+.chargement { text-align: center; font-style: italic; opacity: .7; }
+
+.pied {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 18px 16px 28px;
+  font-size: .85rem;
+  font-style: italic;
+  color: var(--laiton-pale);
+  opacity: .6;
+}
+
+/* ---------- Feuille de papier ---------- */
+.feuille {
+  background: var(--registre);
+  color: var(--encre);
+  padding: clamp(24px, 5vw, 48px);
+  box-shadow: 0 1px 0 var(--registre-ombre), 0 18px 40px rgba(0,0,0,.45);
+  position: relative;
+}
+.feuille + .feuille { margin-top: 28px; }
+.feuille h1, .feuille h2 {
+  font-family: var(--serif-titre);
+  font-weight: 400;
+  line-height: 1.2;
+  margin: 0 0 .6em;
+}
+.feuille h1 { font-size: 1.9rem; }
+.feuille h2 { font-size: 1.4rem; }
+.feuille p { margin: 0 0 1em; max-width: 62ch; }
+.en-tete-lettre {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--registre-ombre);
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+  font-size: .9rem;
+  color: var(--encre-pale);
+}
+.en-tete-lettre .expediteur { font-family: var(--serif-titre); font-size: 1.15rem; color: var(--encre); }
+.plume {
+  font-family: var(--plume);
+  font-size: 2.1rem;
+  line-height: 1.2;
+  color: #1f2a4a;
+}
+.signature-bloc { margin-top: 28px; }
+.signature-bloc .qualite { font-size: .9rem; color: var(--encre-pale); font-style: italic; }
+
+/* ---------- Contrat ---------- */
+.article { margin-bottom: 1.1em; }
+.article strong { font-weight: 600; }
+.clause-discrete { font-size: .92rem; color: var(--encre-pale); }
+
+/* ---------- Formulaires ---------- */
+label { display: block; font-size: .95rem; margin-bottom: 4px; color: var(--encre-pale); }
+input[type=email], input[type=password], input[type=text] {
+  width: 100%;
+  font: inherit;
+  color: var(--encre);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--encre-pale);
+  padding: 6px 2px;
+  margin-bottom: 18px;
+}
+input:focus { outline: none; border-bottom: 2px solid var(--sceau); }
+input.saisie-plume {
+  font-family: var(--plume);
+  font-size: 2rem;
+  color: #1f2a4a;
+}
+.bouton {
+  font: inherit;
+  font-weight: 500;
+  background: var(--sceau);
+  color: var(--registre);
+  border: none;
+  padding: 10px 22px;
+  cursor: pointer;
+}
+.bouton:hover { background: #8f2a31; }
+.bouton:disabled { opacity: .5; cursor: wait; }
+.bouton-second {
+  font: inherit;
+  background: transparent;
+  color: var(--encre);
+  border: 1px solid var(--encre-pale);
+  padding: 9px 20px;
+  cursor: pointer;
+}
+.bouton:focus-visible, .bouton-second:focus-visible, .lien-discret:focus-visible, .onglet:focus-visible {
+  outline: 2px solid var(--laiton);
+  outline-offset: 3px;
+}
+.actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.erreur { color: var(--sceau); font-style: italic; min-height: 1.4em; margin: 6px 0 0; }
+.lien-discret {
+  background: none; border: none; color: inherit; font: inherit;
+  text-decoration: underline; cursor: pointer; padding: 0;
+}
+
+/* ---------- Porte d'entrée ---------- */
+.porte { max-width: 440px; margin: 0 auto; }
+.porte .note { font-size: .92rem; color: var(--encre-pale); font-style: italic; }
+
+/* ---------- Sceau (seul moment animé) ---------- */
+.sceau {
+  position: absolute;
+  right: clamp(16px, 5vw, 40px);
+  bottom: clamp(16px, 4vw, 32px);
+  width: 92px; height: 92px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #a2363d, var(--sceau) 55%, #5a161b);
+  color: #f0d9c4;
+  display: grid; place-items: center;
+  font-family: var(--serif-titre);
+  font-size: 1.5rem;
+  box-shadow: inset 0 0 0 6px rgba(0,0,0,.18), 0 3px 6px rgba(0,0,0,.35);
+  transform: rotate(-12deg);
+}
+.sceau.appose { animation: apposer .55s cubic-bezier(.2,.9,.3,1.3) both; }
+@keyframes apposer {
+  from { transform: rotate(-12deg) scale(2.2); opacity: 0; }
+  to   { transform: rotate(-12deg) scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sceau.appose { animation: none; }
+}
+
+/* ---------- Fondation : aperçu d'étiquette ---------- */
+.etiquette {
+  margin: 8px 0 24px;
+  border: 1px solid var(--encre);
+  outline: 1px solid var(--encre);
+  outline-offset: 4px;
+  padding: 22px 16px;
+  text-align: center;
+}
+.etiquette .nom-cercle { font-family: var(--serif-titre); font-size: 1.8rem; line-height: 1.15; overflow-wrap: anywhere; }
+.etiquette .devise-cercle { font-style: italic; color: var(--encre-pale); margin-top: 6px; overflow-wrap: anywhere; }
+.etiquette .vide { color: var(--registre-ombre); }
+
+/* ---------- Compte ---------- */
+.solde {
+  display: flex; gap: 28px; flex-wrap: wrap;
+  border-top: 1px solid var(--registre-ombre);
+  border-bottom: 1px solid var(--registre-ombre);
+  padding: 14px 0; margin: 18px 0 22px;
+}
+.solde div { min-width: 140px; }
+.solde .valeur { font-family: var(--serif-titre); font-size: 1.6rem; display: block; }
+.solde .intitule { font-size: .88rem; color: var(--encre-pale); }
+
+.fournisseur { border-top: 1px solid var(--registre-ombre); padding: 18px 0 6px; }
+.fournisseur:first-of-type { border-top: none; }
+.fournisseur h3 { font-family: var(--serif-titre); font-weight: 400; font-size: 1.25rem; margin: 0; }
+.fournisseur .origine { font-style: italic; color: var(--encre-pale); font-size: .92rem; }
+.fournisseur .desc { font-size: .95rem; margin: 6px 0 10px; }
+.reference {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 16px;
+  padding: 8px 0;
+  border-bottom: 1px dotted var(--registre-ombre);
+  font-size: .95rem;
+}
+.reference .prix { font-variant-numeric: tabular-nums; text-align: right; }
+.reference .detail { grid-column: 1 / -1; font-size: .86rem; color: var(--encre-pale); }
+.gamme-rare { color: var(--sceau); font-style: italic; }
+.avis {
+  background: rgba(123,34,40,.07);
+  border-left: 3px solid var(--sceau);
+  padding: 10px 14px;
+  font-size: .95rem;
+  margin: 0 0 22px;
+}
+
+/* ---------- Vue MJ ---------- */
+.onglets { display: flex; gap: 4px; margin-bottom: 18px; flex-wrap: wrap; }
+.onglet {
+  font: inherit;
+  background: var(--cuir-clair);
+  color: var(--laiton-pale);
+  border: 1px solid rgba(184,147,90,.35);
+  padding: 7px 16px;
+  cursor: pointer;
+}
+.onglet[aria-selected=true] { background: var(--laiton); color: var(--cuir); border-color: var(--laiton); }
+.coulisses dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0 0 20px; }
+.coulisses dt { color: var(--encre-pale); }
+.coulisses dd { margin: 0; overflow-wrap: anywhere; }
+.journal { list-style: none; padding: 0; margin: 0; font-size: .92rem; }
+.journal li { padding: 6px 0; border-bottom: 1px dotted var(--registre-ombre); }
+.journal time { color: var(--encre-pale); margin-right: 8px; font-variant-numeric: tabular-nums; }
+.badge-mj { font-size: .8rem; color: var(--encre-pale); font-style: italic; }
+
+@media (max-width: 520px) {
+  body { font-size: 16px; }
+  .sceau { width: 72px; height: 72px; font-size: 1.2rem; }
+}
