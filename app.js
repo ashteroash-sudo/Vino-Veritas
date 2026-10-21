@@ -45,6 +45,34 @@ async function chargerCatalogue() {
   data.forEach((f) => f.produits.sort((a, b) => ordreGamme[a.gamme] - ordreGamme[b.gamme] || a.prix_achat - b.prix_achat));
   return data;
 }
+let cacheLocaux = null;
+async function chargerLocaux() {
+  if (cacheLocaux) return cacheLocaux;
+  const { data, error } = await sb.from("locaux").select("*").order("ordre");
+  if (error) throw error;
+  cacheLocaux = data;
+  return data;
+}
+const PRESTIGE = { 1: "modeste", 2: "honorable", 3: "remarquable" };
+const DISCRETION = { 1: "très exposé", 2: "ordinaire", 3: "très discret" };
+function blocAnnonce(l, avecChoix) {
+  const corps = `
+      <div class="annonce-tete">
+        <h3>${esc(l.titre)}</h3>
+        <span class="loyer">${dollars(l.loyer_hebdo)} <small>par semaine</small></span>
+      </div>
+      <div class="origine">${esc(l.adresse)}</div>
+      <p class="desc">${esc(l.description)}</p>
+      <dl class="annonce-traits">
+        <div><dt>Capacité</dt><dd>jusqu'à ${l.capacite} invités</dd></div>
+        <div><dt>Standing</dt><dd>${PRESTIGE[l.prestige]}</dd></div>
+        <div><dt>Discrétion</dt><dd>${DISCRETION[l.discretion]}</dd></div>
+      </dl>`;
+  return avecChoix
+    ? `<label class="annonce annonce-choix"><input type="radio" name="local" value="${l.id}" required>${corps}</label>`
+    : `<div class="annonce">${corps}</div>`;
+}
+
 async function chargerJournal() {
   const { data, error } = await sb.from("journal").select("*").order("cree_le", { ascending: false }).limit(50);
   if (error) throw error;
@@ -144,6 +172,8 @@ function lettreAccueil() {
         <div class="plume">Thaddeus Calloway</div>
         <div class="qualite">Thaddeus Calloway III, directeur de la Maison</div>
       </div>
+      <p class="post-scriptum">P.-S. M. Vance s'est permis de faire repérer trois locaux à Miller Beach, le quartier le plus fréquentable de Gary. Le choix vous appartiendra au moment de fonder votre cercle. <button type="button" class="lien-discret" id="voir-annonces" aria-expanded="false">Consulter les annonces</button></p>
+      <div id="annonces-ps" hidden></div>
     </article>`;
 }
 
@@ -176,6 +206,17 @@ function texteContrat(c, signe) {
 
 function vueInvitation(cible) {
   cible.innerHTML = lettreAccueil() + texteContrat(etat.cercle, false);
+  const btnPS = cible.querySelector("#voir-annonces");
+  const boitePS = cible.querySelector("#annonces-ps");
+  btnPS.addEventListener("click", async () => {
+    if (!boitePS.innerHTML) {
+      try { boitePS.innerHTML = (await chargerLocaux()).map((l) => blocAnnonce(l, false)).join(""); }
+      catch (e) { boitePS.innerHTML = `<p class="erreur">${esc(messageErreur(e))}</p>`; }
+    }
+    boitePS.hidden = !boitePS.hidden;
+    btnPS.setAttribute("aria-expanded", String(!boitePS.hidden));
+    btnPS.textContent = boitePS.hidden ? "Consulter les annonces" : "Masquer les annonces";
+  });
   const form = cible.querySelector("#form-signature");
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -194,7 +235,7 @@ function vueContratSigne(cible) {
   cible.innerHTML = texteContrat(etat.cercle, true) + `
     <section class="feuille">
       <p>L'accord est enregistré. Le Garant en a été informé.</p>
-      <p>Il vous reste à donner un nom à votre cercle : c'est sous ce nom que la Maison établira vos factures.</p>
+      <p>Il vous reste à choisir le local de votre cercle et à lui donner un nom : c'est sous ce nom que la Maison établira vos factures.</p>
       <div class="actions"><button class="bouton" id="vers-fondation">Fonder le cercle</button></div>
     </section>`;
   etat.sceauAAnimer = false;
@@ -205,16 +246,23 @@ function vueContratSigne(cible) {
   cible.querySelector("#contrat").scrollIntoView({ block: "end" });
 }
 
-function vueFondation(cible) {
+async function vueFondation(cible) {
+  cible.innerHTML = `<p class="chargement">Préparation des annonces…</p>`;
+  const locaux = await chargerLocaux();
   cible.innerHTML = `
     <section class="feuille">
       <h1>Fondation du cercle</h1>
-      <p>Choisissez le nom sous lequel votre cercle sera connu de ses membres et de la Maison. Une devise est facultative.</p>
-      <div class="etiquette" aria-hidden="true">
-        <div class="nom-cercle" id="apercu-nom"><span class="vide">Nom du cercle</span></div>
-        <div class="devise-cercle" id="apercu-devise"></div>
-      </div>
+      <p>Choisissez le local de votre cercle, puis le nom sous lequel il sera connu de ses membres et de la Maison. Une devise est facultative.</p>
       <form id="form-fondation">
+        <fieldset class="choix-local">
+          <legend>Le local, à Miller Beach</legend>
+          <p class="clause-discrete">Le loyer est prélevé sur la trésorerie du cercle à chaque relevé du mardi.</p>
+          ${locaux.map((l) => blocAnnonce(l, true)).join("")}
+        </fieldset>
+        <div class="etiquette" aria-hidden="true">
+          <div class="nom-cercle" id="apercu-nom"><span class="vide">Nom du cercle</span></div>
+          <div class="devise-cercle" id="apercu-devise"></div>
+        </div>
         <label for="nom">Nom du cercle</label>
         <input id="nom" type="text" maxlength="80" required autocomplete="off">
         <label for="devise">Devise (facultative)</label>
@@ -233,10 +281,13 @@ function vueFondation(cible) {
   form.devise.addEventListener("input", () => { apDev.textContent = form.devise.value; });
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    if (!confirm(`Fonder le cercle « ${form.nom.value.trim()} » ?`)) return;
-    const btn = form.querySelector("button");
+    const choix = form.querySelector("input[name=local]:checked");
+    if (!choix) { form.querySelector("#erreur").textContent = "Choisissez d'abord un local."; return; }
+    const local = locaux.find((l) => l.id === choix.value);
+    if (!confirm(`Fonder le cercle « ${form.nom.value.trim()} » et signer le bail de ${local.titre} (${dollars(local.loyer_hebdo)} par semaine) ?`)) return;
+    const btn = form.querySelector("button[type=submit]");
     btn.disabled = true;
-    const { data, error } = await sb.rpc("fonder_cercle", { p_nom: form.nom.value, p_devise: form.devise.value });
+    const { data, error } = await sb.rpc("fonder_cercle", { p_nom: form.nom.value, p_devise: form.devise.value, p_local: choix.value });
     btn.disabled = false;
     if (error) { form.querySelector("#erreur").textContent = messageErreur(error); return; }
     etat.cercle = data;
@@ -248,7 +299,8 @@ function vueFondation(cible) {
 async function vueCompte(cible) {
   const c = etat.cercle;
   cible.innerHTML = `<p class="chargement">Ouverture du compte…</p>`;
-  const [catalogue, journal] = await Promise.all([chargerCatalogue(), chargerJournal()]);
+  const [catalogue, journal, locaux] = await Promise.all([chargerCatalogue(), chargerJournal(), chargerLocaux()]);
+  const local = locaux.find((l) => l.id === c.local_id);
   const disponible = Number(c.ligne_credit) - Number(c.credit_utilise);
   const journalPublic = journal.filter((j) => j.visible_gerante);
   cible.innerHTML = `
@@ -258,9 +310,11 @@ async function vueCompte(cible) {
         <span>Compte ouvert le ${dateLongue(c.fonde_le)}</span>
       </div>
       ${c.devise ? `<p><em>${esc(c.devise)}</em></p>` : ""}
+      ${local ? `<p class="adresse-cercle">${esc(local.titre)}, ${esc(local.adresse)}</p>` : ""}
       <div class="solde">
         <div><span class="valeur">${dollars(disponible)}</span><span class="intitule">Crédit disponible chez la Maison</span></div>
         <div><span class="valeur">${dollars(c.tresorerie)}</span><span class="intitule">Trésorerie du cercle</span></div>
+        ${local ? `<div><span class="valeur">${dollars(local.loyer_hebdo)}</span><span class="intitule">Loyer hebdomadaire</span></div>` : ""}
         <div><span class="valeur">0</span><span class="intitule">Bouteilles en cave</span></div>
       </div>
       <p class="avis">Votre première allocation sera proposée le ${prochainMardi19h().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à 19 h. D'ici là, vous pouvez consulter les références de nos fournisseurs.</p>
@@ -305,7 +359,8 @@ async function vueMJ() {
   if (etat.ongletMJ === "joueuse") return vueJoueuse(cible);
 
   const c = etat.cercle;
-  const journal = await chargerJournal();
+  const [journal, locaux] = await Promise.all([chargerJournal(), chargerLocaux()]);
+  const local = locaux.find((l) => l.id === c.local_id);
   const statuts = { invitation: "Carte remise, contrat pas encore signé", contrat_signe: "Contrat signé, cercle pas encore fondé", actif: "Cercle fondé" };
   cible.innerHTML = `
     <section class="feuille coulisses">
@@ -316,6 +371,7 @@ async function vueMJ() {
         <dt>Signature</dt><dd>${c.signature ? esc(c.signature) + " (" + dateCourte(c.contrat_signe_le) + ")" : "—"}</dd>
         <dt>Nom du cercle</dt><dd>${esc(c.nom) || "—"}</dd>
         <dt>Devise</dt><dd>${esc(c.devise) || "—"}</dd>
+        <dt>Local</dt><dd>${local ? `${esc(local.titre)} (${dollars(local.loyer_hebdo)} par semaine)` : "—"}</dd>
         <dt>Fondé le</dt><dd>${c.fonde_le ? dateCourte(c.fonde_le) : "—"}</dd>
         <dt>Ligne de crédit</dt><dd>${dollars(c.ligne_credit)} (utilisé : ${dollars(c.credit_utilise)})</dd>
         <dt>Trésorerie</dt><dd>${dollars(c.tresorerie)}</dd>
@@ -330,7 +386,7 @@ async function vueMJ() {
     </section>`;
   cible.querySelector("#actualiser").addEventListener("click", async () => { await chargerCercle(); vueMJ(); });
   cible.querySelector("#reinit").addEventListener("click", async () => {
-    if (!confirm("Effacer la signature et le nom du cercle pour revenir à l'invitation ?")) return;
+    if (!confirm("Effacer la signature, le nom du cercle et le bail pour revenir à l'invitation ?")) return;
     const { data, error } = await sb.rpc("reinitialiser_cercle");
     if (error) { cible.querySelector("#erreur").textContent = messageErreur(error); return; }
     etat.cercle = data;

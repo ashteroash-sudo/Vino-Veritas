@@ -262,3 +262,32 @@ input.saisie-plume {
   body { font-size: 16px; }
   .sceau { width: 72px; height: 72px; font-size: 1.2rem; }
 }
+
+/* ---------- Locaux (P.-S. et fondation) ---------- */
+.post-scriptum { margin-top: 28px; font-size: .95rem; font-style: italic; }
+.post-scriptum .lien-discret { font-style: normal; margin-left: 4px; }
+#annonces-ps { margin-top: 12px; }
+.annonce {
+  display: block;
+  border: 1px solid var(--registre-ombre);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  background: rgba(255,255,255,.25);
+}
+.annonce-choix { cursor: pointer; position: relative; padding-left: 46px; }
+.annonce-choix input { position: absolute; left: 16px; top: 21px; accent-color: var(--sceau); width: 18px; height: 18px; }
+.annonce-choix:has(input:checked) { border-color: var(--sceau); background: rgba(123,34,40,.06); }
+.annonce-choix:has(input:focus-visible) { outline: 2px solid var(--laiton); outline-offset: 2px; }
+.annonce-tete { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.annonce h3 { font-family: var(--serif-titre); font-weight: 400; font-size: 1.2rem; margin: 0; }
+.annonce .loyer { font-family: var(--serif-titre); font-size: 1.15rem; white-space: nowrap; }
+.annonce .loyer small { font-family: var(--serif); font-size: .8rem; color: var(--encre-pale); }
+.annonce .origine { font-style: italic; color: var(--encre-pale); font-size: .92rem; }
+.annonce .desc { font-size: .95rem; margin: 6px 0 10px; }
+.annonce-traits { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0; font-size: .9rem; }
+.annonce-traits dt { display: inline; color: var(--encre-pale); }
+.annonce-traits dt::after { content: " : "; }
+.annonce-traits dd { display: inline; margin: 0; }
+.choix-local { border: none; padding: 0; margin: 0 0 22px; }
+.choix-local legend { font-family: var(--serif-titre); font-size: 1.25rem; padding: 0; margin-bottom: 4px; }
+.adresse-cercle { font-size: .95rem; color: var(--encre-pale); margin-top: -6px; }
