@@ -384,6 +384,7 @@ async function vueCompte(cible) {
   const derniere = dernieres?.[0];
   const resultat = derniere?.resume?.resultat != null ? Number(derniere.resume.resultat) : null;
   const signe = (n) => (n > 0 ? "+" : "") + dollars(n);
+  etat.budget = await calculBudget(c, local);
   etat.ongletGerant ??= "compte";
   cible.innerHTML = `
     <section class="feuille entete-compte">
@@ -407,12 +408,15 @@ async function vueCompte(cible) {
       ${ONGLETS_GERANT.map(([k, t]) => `<button class="onglet" role="tab" data-onglet-g="${k}" aria-selected="${etat.ongletGerant === k}">${t}</button>`).join("")}
       <button class="onglet onglet-aide" id="aide-onglet" title="À quoi sert cet onglet ?" aria-label="À quoi sert cet onglet ?">?</button>
     </div>
+    <div class="budget" id="budget" aria-live="polite"></div>
     <section class="feuille" id="contenu-gerant"></section>`;
+  majBudget(0);
   const boite = cible.querySelector("#contenu-gerant");
   const actualiser = () => vueCompte(cible);
   // changer d'onglet ne recharge que le contenu de l'onglet
   cible.querySelectorAll("[data-onglet-g]").forEach((b) => b.addEventListener("click", () => {
     etat.ongletGerant = b.dataset.ongletG;
+    majBudget(0);
     cible.querySelectorAll("[data-onglet-g]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
     afficherOngletGerant(boite, c, actualiser);
   }));
@@ -715,6 +719,36 @@ function bilan(lignes) {
     <p class="clause-discrete">Résultat de la semaine : <strong class="${ent - sor >= 0 ? "positif" : "negatif"}">${ent - sor >= 0 ? "+" : ""}${dollars(ent - sor)}</strong>${credit ? `. Avance prise sur la ligne de crédit : ${dollars(credit)}` : ""}${rembourse ? `. Remboursé à Calloway : ${dollars(rembourse)}` : ""}.</p>`;
 }
 
+// Ce qu'il reste réellement à dépenser d'ici le prochain relevé :
+// trésorerie + crédit restant − ce qui tombera mardi (loyer, salaires, bouteilles, soirées, Vance)
+async function calculBudget(c, local) {
+  if (c.statut !== "actif" || !c.semaine_courante) return null;
+  const prochain = prochaineCloture(c);
+  const [{ data: achats }, { data: evts }, { data: pers }] = await Promise.all([
+    sb.from("achats").select("montant").eq("semaine", c.semaine_courante),
+    sb.from("evenements").select("cout_alcool").lt("date_evt", prochain.toISOString()).is("semaine_comptee", null),
+    sb.from("personnel").select("salaire_hebdo").eq("statut", "embauche"),
+  ]);
+  const somme = (l, k) => (l || []).reduce((s, x) => s + Number(x[k]), 0);
+  const loyer = !local ? 0 : local.depart && c.semaine_courante <= 2 ? 0 : Number(local.loyer_hebdo);
+  const vance = c.semaine_courante >= 3 && Number(c.dette_local) > 0 ? Math.min(Number(c.remboursement_local) || 100, Number(c.dette_local)) : 0;
+  const engage = loyer + somme(pers, "salaire_hebdo") + somme(achats, "montant") + somme(evts, "cout_alcool") + vance;
+  const dispo = Number(c.tresorerie) + Number(c.ligne_credit) - Number(c.credit_utilise);
+  return { dispo, engage, reste: dispo - engage, tresorerie: Number(c.tresorerie), credit: Number(c.ligne_credit) - Number(c.credit_utilise) };
+}
+// Affiche le bandeau ; « projet » = dépense envisagée à l'écran (commande en cours de saisie)
+function majBudget(projet) {
+  const el = document.getElementById("budget");
+  const b = etat.budget;
+  if (!el || !b) { if (el) el.hidden = true; return; }
+  const apres = b.reste - projet;
+  el.hidden = false;
+  el.className = "budget" + (apres < 0 ? " budget-rouge" : apres < 1000 ? " budget-orange" : "");
+  el.innerHTML = `
+    <div><span class="budget-montant">${dollars(apres)}</span> <span class="budget-titre">${projet > 0 ? "resteront après cet achat" : "à dépenser d'ici mardi"}</span></div>
+    <div class="budget-detail">Trésorerie ${dollars(b.tresorerie)} + crédit restant ${dollars(b.credit)} − déjà engagé pour mardi ${dollars(b.engage)} (loyer, salaires, bouteilles, soirées${b.engage && Number(etat.cercle?.dette_local) > 0 ? ", M. Vance" : ""})${projet > 0 ? ` − cet achat ${dollars(projet)}` : ""}.${apres < 0 ? " <strong>Au-delà, la Maison ne pourra plus avancer l'argent.</strong>" : ""}</div>`;
+}
+
 async function blocEngagements(c) {
   if (!c.semaine_courante) return "";
   const prochain = prochaineCloture(c);
@@ -783,6 +817,7 @@ async function ongletCave(boite, c, actualiser) {
     const ok = n >= 5 && n <= reste;
     form.querySelector("#panier-total").textContent = `${n} bouteille${n > 1 ? "s" : ""}, ${dollars(m)}${n > 0 && n < 5 ? " (minimum 5)" : n > reste ? ` (maximum ${reste})` : ""}`;
     form.querySelector("button[type=submit]").disabled = !ok;
+    majBudget(m);
     return { n, m };
   };
   form.addEventListener("input", recalcul);
@@ -871,7 +906,8 @@ async function ongletAmenagements(boite, c, actualiser) {
     const b = ev.target.closest("[data-acheter]");
     if (!b) return;
     const modele = Number(boite.querySelector(`input[name="m-${b.dataset.acheter}"]:checked`)?.value || 1);
-    if (!await demander(`Acquérir « ${b.dataset.nom} » (modèle ${modele}) pour ${dollars(b.dataset.prix)} ?`)) return;
+    const apres = etat.budget ? etat.budget.reste - Number(b.dataset.prix) : null;
+    if (!await demander(`Acquérir « ${b.dataset.nom} » (modèle ${modele}) pour ${dollars(b.dataset.prix)} ?${apres != null ? `\n\nIl vous restera ${dollars(apres)} à dépenser d'ici mardi${apres < 0 ? " : c'est plus que la Maison ne peut vous avancer." : "."}` : ""}`)) return;
     b.disabled = true;
     const { error } = await sb.rpc("acheter_amenagement", { p_slug: b.dataset.acheter, p_modele: modele });
     if (error) { b.disabled = false; boite.querySelector("#erreur-amen").textContent = messageErreur(error); return; }
@@ -992,7 +1028,7 @@ async function ongletPersonnel(boite, c, actualiser) {
             <h3>${esc(p.nom)}, ${p.age} ans</h3>
             <div class="origine">${LIBELLE_POSTE[p.poste]}. Salaire demandé : ${dollars(p.salaire_hebdo)} par semaine</div>
             <p>${esc(p.presentation)}</p>
-            <div class="actions"><button class="bouton" data-embaucher="${p.slug}" data-nom="${esc(p.nom)}">Embaucher</button></div>
+            <div class="actions"><button class="bouton" data-embaucher="${p.slug}" data-nom="${esc(p.nom)}" data-salaire="${p.salaire_hebdo}">Embaucher</button></div>
           </div>
         </article>`).join("")
       : `<p class="clause-discrete">Aucun dossier cette semaine. L'agence vous en transmettra d'autres au prochain relevé.</p>`}
@@ -1011,7 +1047,7 @@ async function ongletPersonnel(boite, c, actualiser) {
     const e = ev.target.closest("[data-embaucher]"), q = ev.target.closest("[data-congedier]");
     if (!e && !q) return;
     let r;
-    if (e) { if (!await demander(`Embaucher ${e.dataset.nom} ?`)) return; r = await sb.rpc("embaucher", { p_slug: e.dataset.embaucher }); }
+    if (e) { const apres = etat.budget ? etat.budget.reste - Number(e.dataset.salaire) : null; if (!await demander(`Embaucher ${e.dataset.nom} pour ${dollars(e.dataset.salaire)} par semaine ?${apres != null ? `\n\nSon premier salaire tombe mardi : il vous restera ${dollars(apres)} à dépenser d'ici là.` : ""}`)) return; r = await sb.rpc("embaucher", { p_slug: e.dataset.embaucher }); }
     else { if (!await demander(`Congédier ${q.dataset.nom} ? Il ne reviendra pas.`)) return; r = await sb.rpc("congedier", { p_slug: q.dataset.congedier }); }
     if (r.error) { boite.querySelector("#erreur-perso").textContent = messageErreur(r.error); return; }
     actualiser();
