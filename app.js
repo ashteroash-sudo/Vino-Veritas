@@ -544,12 +544,23 @@ C'est la page publique de votre cercle, celle que verra quiconque en connaît l'
 
 Une soirée a un coût en alcool, débité au relevé, et un prix de participation que vous fixez : trop cher, les membres modestes restent chez eux. Les membres viennent plus volontiers quand le thème correspond à leurs goûts.`,
 };
-function montrerAide(onglet, force = false) {
+const BIENVENUE = `Bienvenue dans le registre de votre cercle.
+
+C'est ici que vous tenez le cercle, semaine après semaine : vous gérez son argent, choisissez ses membres et son personnel, commandez votre cave, aménagez le salon et annoncez vos soirées.
+
+Vous y réglerez aussi les mille tracas d'un établissement de ce genre, et quelques affaires plus… personnelles.
+
+Chaque mardi à 19 h, la Maison arrête vos comptes et la semaine suivante commence. Quelques minutes par semaine suffisent, mais rien ne se fait sans vous.
+
+Chaque onglet s'explique la première fois que vous l'ouvrez ; le bouton « ? » vous rappelle ces explications à tout moment.`;
+
+function dejaVu(cle) { try { return localStorage.getItem(cle) === "1"; } catch { return false; } }
+function marquerVu(cle) { try { localStorage.setItem(cle, "1"); } catch {} }
+async function montrerAide(onglet, force = false) {
+  if (!force && !dejaVu("vv-bienvenue")) { marquerVu("vv-bienvenue"); await informer(BIENVENUE); }
   const cle = "vv-aide-" + onglet;
-  let vu = false;
-  try { vu = localStorage.getItem(cle) === "1"; } catch {}
-  if (vu && !force) return;
-  try { localStorage.setItem(cle, "1"); } catch {}
+  if (dejaVu(cle) && !force) return;
+  marquerVu(cle);
   if (AIDES[onglet]) informer(AIDES[onglet]);
 }
 
