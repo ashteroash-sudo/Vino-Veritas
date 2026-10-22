@@ -549,7 +549,9 @@ Le bar puise dans la cave : sans bouteilles, il ne rapporte presque rien. Ce qui
 
 Mobilier, service et tenues du personnel donnent au cercle son rang. Chaque pièce existe en deux modèles : choisissez celui qui vous plaît.
 
-Les plus belles pièces ne sont proposées qu'aux cercles déjà établis. Certaines rendent aussi les soirées plus agréables, ou le cercle plus discret.`,
+Les plus belles pièces ne sont proposées qu'aux cercles déjà établis. Certaines rendent aussi les soirées plus agréables, ou le cercle plus discret.
+
+Un meuble ne rapporte rien par lui-même : il rend le cercle plus attirant, il ne remplit pas la caisse. Payé à crédit, il pèsera sur vos comptes bien avant d'attirer le premier membre.`,
   vitrine: `La vitrine.
 
 C'est la page publique de votre cercle, celle que verra quiconque en connaît l'adresse. Présentez l'esprit du cercle, annoncez vos soirées et mettez en avant vos bouteilles.
@@ -566,12 +568,14 @@ Chaque mardi à 19 h, la Maison arrête vos comptes et la semaine suivante comme
 
 Ne vous y trompez pas : il s'agit d'une véritable gestion. Les dépenses tombent chaque semaine, que le cercle prospère ou non. Une faillite ne serait pas seulement la fin du cercle : quelqu'un s'est porté garant de vous, et ce genre de personne n'oublie pas ce qu'on lui doit.
 
+Un conseil, que la Maison donne à tous ses jeunes clients : ne dépensez pas l'argent que vous n'avez pas encore gagné. Le crédit n'est pas une recette, c'est une dette. Un salon somptueux ne remplit pas une salle vide : ce sont les membres qui font vivre un cercle, et ils viennent peu à peu. Commencez modestement ; les belles pièces attendront que les recettes suivent.
+
 Chaque onglet s'explique la première fois que vous l'ouvrez ; le bouton « ? » vous rappelle ces explications à tout moment.`;
 
 function dejaVu(cle) { try { return localStorage.getItem(cle) === "1"; } catch { return false; } }
 function marquerVu(cle) { try { localStorage.setItem(cle, "1"); } catch {} }
 async function montrerAide(onglet, force = false) {
-  if (!force && !dejaVu("vv-bienvenue")) { marquerVu("vv-bienvenue"); await informer(BIENVENUE); }
+  if (!force && !dejaVu("vv-bienvenue-2")) { marquerVu("vv-bienvenue-2"); await informer(BIENVENUE); }
   const cle = "vv-aide-" + onglet;
   if (dejaVu(cle) && !force) return;
   marquerVu(cle);
