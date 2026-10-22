@@ -653,6 +653,8 @@ async function ongletReleve(boite, c, actualiser) {
     ${c.en_pause ? `<p class="avis">La Maison a suspendu les relevés pour le moment.</p>`
       : c.semaine_courante === 0 ? `<p class="avis">Votre première semaine d'activité commencera le ${jourHeure(c.date_debut)}. Les premières candidatures de membres et de personnel arriveront ce jour-là.</p>`
       : `<p class="avis">Prochain relevé : le ${jourHeure(prochain)}. Le loyer, les salaires et l'alcool des soirées seront débités à ce moment-là.</p>`}
+    ${c.dernier_conseil != null && c.dernier_conseil === c.semaine_courante - 1 && journal.find((j) => j.type === "conseil")
+      ? `<div class="lettre-conseil"><p>${esc(journal.find((j) => j.type === "conseil").message)}</p></div>` : ""}
     ${await blocEngagements(c)}
     ${await blocDetteVance(c)}
     ${Number(c.credit_utilise) > 0 ? (Number(c.tresorerie) > 0 ? `
