@@ -1,7 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
 
-const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Pas de verrou inter-onglets sur la session : avec plusieurs onglets ouverts, il bloquait les requêtes pendant de longues secondes.
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { lock: async (_nom, _delai, fn) => await fn() },
+});
 const app = document.getElementById("app");
 const btnDeco = document.getElementById("deconnexion");
 
