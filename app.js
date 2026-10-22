@@ -315,8 +315,10 @@ const portrait = (dossier, slug, nom) =>
 
 async function vueCompte(cible) {
   cible.innerHTML = `<p class="chargement">Ouverture du compte…</p>`;
-  await sb.rpc("faire_avancer");             // fait passer les mardis écoulés
-  await chargerCercle();
+  // un seul appel : fait passer les mardis écoulés et renvoie l'état du cercle
+  const { data: ec, error: eerr } = await sb.rpc("etat_cercle");
+  if (eerr) throw eerr;
+  etat.cercle = ec;
   const c = etat.cercle;
   const locaux = await chargerLocaux();
   const local = locaux.find((l) => l.id === c.local_id);
@@ -340,12 +342,20 @@ async function vueCompte(cible) {
       ${ONGLETS_GERANT.map(([k, t]) => `<button class="onglet" role="tab" data-onglet-g="${k}" aria-selected="${etat.ongletGerant === k}">${t}</button>`).join("")}
     </div>
     <section class="feuille" id="contenu-gerant"></section>`;
-  cible.querySelectorAll("[data-onglet-g]").forEach((b) => b.addEventListener("click", () => {
-    etat.ongletGerant = b.dataset.ongletG;
-    vueCompte(cible);
-  }));
   const boite = cible.querySelector("#contenu-gerant");
   const actualiser = () => vueCompte(cible);
+  // changer d'onglet ne recharge que le contenu de l'onglet
+  cible.querySelectorAll("[data-onglet-g]").forEach((b) => b.addEventListener("click", () => {
+    etat.ongletGerant = b.dataset.ongletG;
+    cible.querySelectorAll("[data-onglet-g]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+    afficherOngletGerant(boite, c, actualiser);
+  }));
+  await afficherOngletGerant(boite, c, actualiser);
+}
+
+async function afficherOngletGerant(boite, c, actualiser) {
+  boite.onclick = null; boite.onsubmit = null;
+  boite.innerHTML = `<p class="chargement">Un instant…</p>`;
   try {
     if (etat.ongletGerant === "compte") await ongletReleve(boite, c);
     else if (etat.ongletGerant === "membres") await ongletMembres(boite, c, actualiser);
@@ -656,9 +666,8 @@ async function vueMJ() {
       <button class="onglet" role="tab" data-onglet="visuels" aria-selected="${etat.ongletMJ === "visuels"}">Visuels des soirées</button>
     </div>
     <div id="contenu-mj"></div>`;
-  app.querySelectorAll(".onglet").forEach((b) => b.addEventListener("click", async () => {
+  app.querySelectorAll(".onglet").forEach((b) => b.addEventListener("click", () => {
     etat.ongletMJ = b.dataset.onglet;
-    await chargerCercle();
     vueMJ();
   }));
   const cible = app.querySelector("#contenu-mj");
@@ -667,7 +676,10 @@ async function vueMJ() {
   if (etat.ongletMJ === "membresmj") return vueMembresMJ(cible);
   if (etat.ongletMJ === "visuels") return vueVisuelsMJ(cible);
 
-  if (etat.cercle.statut === "actif") { await sb.rpc("faire_avancer"); await chargerCercle(); }
+  if (etat.cercle.statut === "actif") {
+    const { data: ec } = await sb.rpc("etat_cercle");
+    if (ec) etat.cercle = ec;
+  }
   const c = etat.cercle;
   const [journal, locaux, { data: soirees }, { data: derniere }, { data: lignesMJ }] = await Promise.all([chargerJournal(), chargerLocaux(),
     sb.from("evenements").select("titre, date_evt, prix_participation, cout_alcool, texte_libre, theme").order("date_evt", { ascending: false }).limit(12),
