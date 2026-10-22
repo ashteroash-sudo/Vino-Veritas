@@ -468,3 +468,11 @@ input[type=file] { font: inherit; font-size: .9rem; margin-bottom: 18px; max-wid
 .musique:focus-visible { outline: 2px solid var(--laiton); outline-offset: 2px; }
 .plafond { font-size: .88rem; color: var(--encre-pale); margin: 6px 0 0; }
 .avis-dette { margin-top: 12px; }
+.encart-vance { border: 1px solid var(--filet, rgba(0,0,0,.15)); border-left: 3px solid var(--sceau); padding: 14px 18px; margin: 18px 0; background: rgba(123,34,40,.04); }
+.encart-vance h3 { margin: 0 0 6px; }
+.encart-vance fieldset { border: 0; padding: 0; margin: 10px 0; display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.encart-vance legend { font-size: .88rem; color: var(--encre-pale); margin-bottom: 6px; }
+.tranche { display: inline-flex; gap: 6px; align-items: baseline; cursor: pointer; }
+.tranche small { color: var(--encre-pale); }
+.demenagement { margin: 14px 0 24px; }
+.demenagement.bloque .annonce { opacity: .6; }

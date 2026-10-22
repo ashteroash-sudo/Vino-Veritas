@@ -107,7 +107,8 @@ async function chargerLocaux() {
   cacheLocaux = data;
   return data;
 }
-const PRESTIGE = { 1: "modeste", 2: "honorable", 3: "remarquable" };
+const PRESTIGE = { 0: "simple", 1: "modeste", 2: "honorable", 3: "remarquable" };
+const PLAFOND_STANDING = { 0: 40, 1: 55, 2: 80, 3: 100 };
 const DISCRETION = { 1: "très exposé", 2: "ordinaire", 3: "très discret" };
 function blocAnnonce(l, avecChoix) {
   const photos = l.photos || [];
@@ -237,7 +238,7 @@ function lettreAccueil() {
         <div class="plume">Thaddeus Calloway</div>
         <div class="qualite">Thaddeus Calloway III, directeur de la Maison</div>
       </div>
-      <p class="post-scriptum">P.-S. M. Vance s'est permis de faire repérer trois locaux à Miller Beach, le quartier le plus fréquentable de Gary. Le choix vous appartiendra au moment de fonder votre cercle. <button type="button" class="lien-discret" id="voir-annonces" aria-expanded="false">Consulter les annonces</button></p>
+      <p class="post-scriptum">P.-S. En attendant que votre cercle ait fait ses preuves, M. Vance met à votre disposition un local qui lui appartient à Miller Beach, le quartier le plus fréquentable de Gary. Il a la bonté de vous en offrir les deux premières semaines de loyer ; vous conviendrez avec lui de leur remboursement. <button type="button" class="lien-discret" id="voir-annonces" aria-expanded="false">Voir le local</button></p>
       <div id="annonces-ps" hidden></div>
     </article>`;
 }
@@ -275,12 +276,12 @@ function vueInvitation(cible) {
   const boitePS = cible.querySelector("#annonces-ps");
   btnPS.addEventListener("click", async () => {
     if (!boitePS.innerHTML) {
-      try { boitePS.innerHTML = (await chargerLocaux()).map((l) => blocAnnonce(l, false)).join(""); }
+      try { boitePS.innerHTML = (await chargerLocaux()).filter((l) => l.depart).map((l) => blocAnnonce(l, false)).join(""); }
       catch (e) { boitePS.innerHTML = `<p class="erreur">${esc(messageErreur(e))}</p>`; }
     }
     boitePS.hidden = !boitePS.hidden;
     btnPS.setAttribute("aria-expanded", String(!boitePS.hidden));
-    btnPS.textContent = boitePS.hidden ? "Consulter les annonces" : "Masquer les annonces";
+    btnPS.textContent = boitePS.hidden ? "Voir le local" : "Masquer le local";
   });
   const form = cible.querySelector("#form-signature");
   form.addEventListener("submit", async (ev) => {
@@ -300,7 +301,7 @@ function vueContratSigne(cible) {
   cible.innerHTML = texteContrat(etat.cercle, true) + `
     <section class="feuille">
       <p>L'accord est enregistré. Le Garant en a été informé.</p>
-      <p>Il vous reste à choisir le local de votre cercle et à lui donner un nom : c'est sous ce nom que la Maison établira vos factures.</p>
+      <p>Il vous reste à prendre possession du local de M. Vance et à donner un nom à votre cercle : c'est sous ce nom que la Maison établira vos factures.</p>
       <div class="actions"><button class="bouton" id="vers-fondation">Fonder le cercle</button></div>
     </section>`;
   etat.sceauAAnimer = false;
@@ -312,17 +313,17 @@ function vueContratSigne(cible) {
 }
 
 async function vueFondation(cible) {
-  cible.innerHTML = `<p class="chargement">Préparation des annonces…</p>`;
-  const locaux = await chargerLocaux();
+  cible.innerHTML = `<p class="chargement">Préparation du bail…</p>`;
+  const locaux = (await chargerLocaux()).filter((l) => l.depart);
   cible.innerHTML = `
     <section class="feuille">
       <h1>Fondation du cercle</h1>
-      <p>Choisissez le local de votre cercle, puis le nom sous lequel il sera connu de ses membres et de la Maison. Une devise est facultative.</p>
+      <p>Votre cercle s'installera dans le local de M. Vance. Donnez-lui le nom sous lequel il sera connu de ses membres et de la Maison. Une devise est facultative.</p>
       <form id="form-fondation">
         <fieldset class="choix-local">
-          <legend>Le local, à Miller Beach</legend>
-          <p class="clause-discrete">Le loyer est prélevé sur la trésorerie du cercle à chaque relevé du mardi.</p>
-          ${locaux.map((l) => blocAnnonce(l, true)).join("")}
+          <legend>Le local de M. Vance, à Miller Beach</legend>
+          <p class="clause-discrete">Les deux premières semaines de loyer vous sont offertes par M. Vance ; vous les lui rembourserez à partir de la troisième semaine, au rythme que vous choisirez. Ensuite, le loyer est prélevé à chaque relevé du mardi. D'autres propriétaires vous ouvriront leurs portes quand votre cercle aura fait ses preuves.</p>
+          ${locaux.map((l) => blocAnnonce(l, true).replace('name="local"', 'name="local" checked')).join("")}
         </fieldset>
         <div class="etiquette" aria-hidden="true">
           <div class="nom-cercle" id="apercu-nom"><span class="vide">Nom du cercle</span></div>
@@ -349,7 +350,7 @@ async function vueFondation(cible) {
     const choix = form.querySelector("input[name=local]:checked");
     if (!choix) { form.querySelector("#erreur").textContent = "Choisissez d'abord un local."; return; }
     const local = locaux.find((l) => l.id === choix.value);
-    if (!await demander(`Fonder le cercle « ${form.nom.value.trim()} » et signer le bail de ${local.titre} (${dollars(local.loyer_hebdo)} par semaine) ?`)) return;
+    if (!await demander(`Fonder le cercle « ${form.nom.value.trim()} » et vous installer à ${local.titre} (${dollars(local.loyer_hebdo)} par semaine, les deux premières offertes par M. Vance) ?`)) return;
     const btn = form.querySelector("button[type=submit]");
     btn.disabled = true;
     const { data, error } = await sb.rpc("fonder_cercle", { p_nom: form.nom.value, p_devise: form.devise.value, p_local: choix.value });
@@ -397,7 +398,7 @@ async function vueCompte(cible) {
         <div><span class="valeur">${dollars(c.tresorerie)}</span><span class="intitule">Trésorerie du cercle</span></div>
         ${resultat != null ? `<div><span class="valeur ${resultat < 0 ? "negatif" : "positif"}">${signe(resultat)}</span><span class="intitule">Résultat de la semaine ${derniere.numero}</span></div>` : ""}
       </div>
-      <p class="plafond">Plafond de crédit : encore ${dollars(Math.max(0, disponible))} avant incident de paiement.${local ? ` Loyer : ${dollars(local.loyer_hebdo)} par semaine.` : ""}</p>
+      <p class="plafond">Plafond de crédit : encore ${dollars(Math.max(0, disponible))} avant incident de paiement.${local ? (local.depart && c.semaine_courante <= 2 ? ` Loyer : offert par M. Vance jusqu'au relevé de la semaine 2.` : ` Loyer : ${dollars(local.loyer_hebdo)} par semaine.`) : ""}${Number(c.dette_local) > 0 ? ` Dû à M. Vance : ${dollars(c.dette_local)}.` : ""}</p>
       ${dette > Number(c.ligne_credit) / 2 ? `<p class="avis avis-dette">La Maison note que votre encours atteint un niveau qui retient son attention. Elle ne doute pas que vous saurez y remédier.</p>` : ""}
     </section>
     <div id="lettre-vance"></div>
@@ -525,7 +526,9 @@ Chaque mardi à 19 h, la Maison arrête un relevé : loyer, salaires, factures e
 
 Si la trésorerie passe sous zéro, la Maison avance l'argent sur votre ligne de crédit. Remboursez-la quand vous le pouvez : une dette qui dure finit par avoir des conséquences.
 
-Le plafond de départ est modeste. La Maison le relève quand votre cercle a prouvé qu'il attire du monde : à 5 000 $ de recettes cumulées, puis à 15 000 $.`,
+Le plafond de départ est modeste. La Maison le relève quand votre cercle a prouvé qu'il attire du monde : à 5 000 $ de recettes cumulées, puis à 15 000 $.
+
+M. Vance vous a offert les deux premiers loyers de son local. Décidez ici combien vous lui rendez chaque semaine : peu à la fois ménage la trésorerie, beaucoup à la fois vous libère plus vite.`,
   membres: `Les membres font vivre le cercle.
 
 Chaque semaine, de nouveaux candidats se présentent. Avant de les admettre, « Se renseigner » (deux fois par semaine) révèle un détail sur eux : tous ne sont pas ce qu'ils paraissent.
@@ -551,7 +554,9 @@ Mobilier, service et tenues du personnel donnent au cercle son rang. Chaque piè
 
 Les plus belles pièces ne sont proposées qu'aux cercles déjà établis. Certaines rendent aussi les soirées plus agréables, ou le cercle plus discret.
 
-Un meuble ne rapporte rien par lui-même : il rend le cercle plus attirant, il ne remplit pas la caisse. Payé à crédit, il pèsera sur vos comptes bien avant d'attirer le premier membre.`,
+Un meuble ne rapporte rien par lui-même : il rend le cercle plus attirant, il ne remplit pas la caisse. Payé à crédit, il pèsera sur vos comptes bien avant d'attirer le premier membre.
+
+En haut de cet onglet, le local. Celui de M. Vance est un point de départ : quand votre cercle en aura fait le tour, un propriétaire plus exigeant acceptera de vous recevoir. Un plus beau local attire une meilleure clientèle et donne accès à de plus belles pièces, mais son loyer est plus lourd.`,
   vitrine: `La vitrine.
 
 C'est la page publique de votre cercle, celle que verra quiconque en connaît l'adresse. Présentez l'esprit du cercle, annoncez vos soirées et mettez en avant vos bouteilles.
@@ -617,6 +622,15 @@ async function ongletReleve(boite, c, actualiser) {
   const parSemaine = {};
   (lignes || []).forEach((l) => (parSemaine[l.semaine] ??= []).push(l));
   boite.onsubmit = async (ev) => {
+    if (ev.target.id === "f-vance") {
+      ev.preventDefault();
+      const m = Number(ev.target.querySelector("input[name=tranche]:checked")?.value);
+      if (!m) return;
+      const { error } = await sb.rpc("choisir_remboursement", { p_montant: m });
+      if (error) { ev.target.querySelector(".statut").textContent = messageErreur(error); return; }
+      actualiser();
+      return;
+    }
     if (ev.target.id !== "f-rembourser") return;
     ev.preventDefault();
     const m = Number(ev.target.remb.value);
@@ -631,6 +645,7 @@ async function ongletReleve(boite, c, actualiser) {
       : c.semaine_courante === 0 ? `<p class="avis">Votre première semaine d'activité commencera le ${jourHeure(c.date_debut)}. Les premières candidatures de membres et de personnel arriveront ce jour-là.</p>`
       : `<p class="avis">Prochain relevé : le ${jourHeure(prochain)}. Le loyer, les salaires et l'alcool des soirées seront débités à ce moment-là.</p>`}
     ${await blocEngagements(c)}
+    ${await blocDetteVance(c)}
     ${Number(c.credit_utilise) > 0 ? `
     <form id="f-rembourser" class="ligne-cotisation">
       <label for="remb">Rembourser Calloway & Sons (vous devez ${dollars(c.credit_utilise)})</label>
@@ -652,9 +667,31 @@ async function ongletReleve(boite, c, actualiser) {
     ${journal.filter((j) => j.visible_gerante).length ? `<h2>Correspondance</h2><ul class="journal">${journal.filter((j) => j.visible_gerante).slice(0, 20).map((j) => `<li><time>${dateCourte(j.cree_le)}</time>${esc(j.message)}</li>`).join("")}</ul>` : ""}`;
 }
 
+// Les loyers offerts par Vance : ce qui reste dû et la tranche hebdomadaire choisie
+async function blocDetteVance(c) {
+  const local = (await chargerLocaux()).find((l) => l.id === c.local_id);
+  const offertEnCours = local?.depart && c.semaine_courante <= 2;
+  const du = offertEnCours ? Number(local.loyer_hebdo) * 2 : Number(c.dette_local);
+  if (!(du > 0)) return "";
+  const choix = Number(c.remboursement_local) || null;
+  const tranche = (m) => {
+    const semaines = Math.ceil(du / m);
+    return `<label class="tranche"><input type="radio" name="tranche" value="${m}" ${choix === m ? "checked" : ""}> ${dollars(m)} par semaine <small>(${semaines} semaine${semaines > 1 ? "s" : ""})</small></label>`;
+  };
+  return `
+    <form id="f-vance" class="encart-vance">
+      <h3>L'offre généreuse de M. Vance</h3>
+      <p>${offertEnCours
+        ? `M. Vance vous offre les loyers des deux premières semaines (${dollars(du)} au total). Il compte être remboursé à partir du relevé de la semaine 3, en plus du loyer.`
+        : `Il reste ${dollars(du)} à rembourser à M. Vance pour les loyers qu'il vous a avancés. La somme choisie est prélevée à chaque relevé, en plus du loyer.`}</p>
+      <fieldset><legend>Décidez du remboursement</legend>${[100, 200, 500].map(tranche).join("")}</fieldset>
+      <div class="actions"><button class="bouton-second" type="submit">${choix ? "Modifier" : "Valider"}</button><span class="statut" aria-live="polite">${choix ? `Actuellement : ${dollars(choix)} par semaine.` : "Sans instruction de votre part, 100 $ seront prélevés chaque semaine."}</span></div>
+    </form>`;
+}
+
 // Regroupe les lignes du relevé en entrées et sorties
 const CAT_ENTREES = [["cotisations", "Cotisations des membres"], ["bar", "Consommations au bar"], ["soiree", "Soirées"], ["plus", "Bonnes surprises"]];
-const CAT_SORTIES = [["loyer", "Loyer (coût fixe)"], ["salaires", "Personnel"], ["amenagements", "Aménagements et fournitures"], ["achats", "Achats de bouteilles"], ["alcool", "Alcool des soirées"], ["moins", "Imprévus"]];
+const CAT_SORTIES = [["loyer", "Loyer et local"], ["salaires", "Personnel"], ["amenagements", "Aménagements et fournitures"], ["achats", "Achats de bouteilles"], ["alcool", "Alcool des soirées"], ["moins", "Imprévus"]];
 function bilan(lignes) {
   const t = {};
   let credit = 0, rembourse = 0;
@@ -663,6 +700,7 @@ function bilan(lignes) {
     let cat = l.poste;
     if (cat === "credit") { credit += m; continue; }
     if (cat === "remboursement") { rembourse += -m; continue; }
+    if (cat === "local") cat = "loyer";
     if (cat === "imprevu" || cat === "divers" || cat === "incident") cat = m >= 0 ? "plus" : "moins";
     t[cat] = (t[cat] || 0) + Math.abs(m);
   }
@@ -763,11 +801,33 @@ async function ongletCave(boite, c, actualiser) {
 
 const CATEGORIES_AMEN = [["mobilier", "Mobilier"], ["service", "Service et éclairage"], ["tenues", "Tenues du personnel"]];
 async function ongletAmenagements(boite, c, actualiser) {
-  const [{ data: articles, error }, { data: achetes }] = await Promise.all([
+  const [{ data: articles, error }, { data: achetes }, locaux] = await Promise.all([
     sb.from("amenagements").select("*").order("ordre"),
     sb.from("amenagements_achetes").select("*"),
+    chargerLocaux(),
   ]);
   if (error) throw error;
+  const local = locaux.find((l) => l.id === c.local_id);
+  const suivants = local ? locaux.filter((l) => !l.depart && l.prestige === local.prestige + 1) : [];
+  const plafond = local ? PLAFOND_STANDING[local.prestige] : 0;
+  const pret = Number(c.standing) >= plafond;
+  const humeurLocal = pret ? "Votre cercle a fait le tour de ce local : il est temps de voir plus grand."
+    : Number(c.standing) >= plafond - 10 ? "Le cercle commence à se sentir à l'étroit dans ce local. Encore un effort, et d'autres portes s'ouvriront."
+    : "Les propriétaires plus exigeants attendent que votre cercle ait fait ses preuves dans son local actuel.";
+  const blocLocal = local ? `
+    <h2>Le local</h2>
+    <p>Vous êtes installé à <strong>${esc(local.titre)}</strong>, ${esc(local.adresse)} : ${local.capacite} invités au plus, ${dollars(local.loyer_hebdo)} de loyer par semaine.</p>
+    ${suivants.length ? `
+      <p class="clause-discrete">${humeurLocal}</p>
+      ${suivants.map((l) => `
+        <div class="demenagement ${pret ? "" : "bloque"}">
+          ${blocAnnonce(l, false)}
+          <div class="actions">
+            ${pret ? `<span class="prix">Caution et transport : ${dollars(Number(l.loyer_hebdo) * 2 + 300)}</span><button class="bouton-second" data-demenager="${l.id}" data-nom="${esc(l.titre)}" data-frais="${Number(l.loyer_hebdo) * 2 + 300}">S'y installer</button>`
+              : `<span class="clause-discrete">Le propriétaire ne vous recevra pas encore.</span>`}
+          </div>
+        </div>`).join("")}`
+      : `<p class="clause-discrete">Il n'existe pas plus belle adresse à Miller Beach.</p>`}` : "";
   const possede = Object.fromEntries((achetes || []).map((a) => [a.slug, a]));
   const dispo = Number(c.tresorerie) + Number(c.ligne_credit) - Number(c.credit_utilise);
   const fiche = (a) => {
@@ -792,11 +852,22 @@ async function ongletAmenagements(boite, c, actualiser) {
       </article>`;
   };
   boite.innerHTML = `
+    ${blocLocal}
     <h2>Aménager le cercle</h2>
     <p class="clause-discrete">Chaque pièce existe en deux modèles : choisissez celui qui vous plaît avant d'acquérir. Le paiement est immédiat, sur la trésorerie puis sur la ligne de crédit si nécessaire (disponible : ${dollars(dispo)}). Les pièces acquises apparaissent dans le salon de votre vitrine.</p>
     ${CATEGORIES_AMEN.map(([k, t]) => `<h3 class="fournisseur-titre">${t}</h3><div class="grille-amen">${articles.filter((a) => a.categorie === k).map(fiche).join("")}</div>`).join("")}
     <p class="erreur" id="erreur-amen" aria-live="polite"></p>`;
   boite.onclick = async (ev) => {
+    const d = ev.target.closest("[data-demenager]");
+    if (d) {
+      if (!await demander(`Quitter votre local actuel pour ${d.dataset.nom} ? La caution et le transport coûtent ${dollars(d.dataset.frais)}, payés tout de suite ; le nouveau loyer s'appliquera dès le prochain relevé. Vos aménagements vous suivent.`)) return;
+      d.disabled = true;
+      const { error } = await sb.rpc("demenager", { p_local: d.dataset.demenager });
+      if (error) { d.disabled = false; await informer(messageErreur(error)); return; }
+      await informer(`Le cercle s'installe à ${d.dataset.nom}.`);
+      actualiser();
+      return;
+    }
     const b = ev.target.closest("[data-acheter]");
     if (!b) return;
     const modele = Number(boite.querySelector(`input[name="m-${b.dataset.acheter}"]:checked`)?.value || 1);
@@ -1005,7 +1076,7 @@ async function vueMJ() {
         <dt>Signature</dt><dd>${c.signature ? esc(c.signature) + " (" + dateCourte(c.contrat_signe_le) + ")" : "—"}</dd>
         <dt>Nom du cercle</dt><dd>${esc(c.nom) || "—"}</dd>
         <dt>Devise</dt><dd>${esc(c.devise) || "—"}</dd>
-        <dt>Local</dt><dd>${local ? `${esc(local.titre)} (${dollars(local.loyer_hebdo)} par semaine)` : "—"}</dd>
+        <dt>Local</dt><dd>${local ? `${esc(local.titre)} (${dollars(local.loyer_hebdo)} par semaine, plafond de standing ${PLAFOND_STANDING[local.prestige]})` : "—"}${Number(c.dette_local) > 0 ? `. Dû à Vance : ${dollars(c.dette_local)} (tranche ${c.remboursement_local ? dollars(c.remboursement_local) : "non choisie, 100 $ par défaut"})` : ""}</dd>
         <dt>Fondé le</dt><dd>${c.fonde_le ? dateCourte(c.fonde_le) : "—"}</dd>
         <dt>Ligne de crédit</dt><dd>${dollars(c.ligne_credit)} (utilisé : ${dollars(c.credit_utilise)}, palier ${c.palier_credit ?? 0}/2 : 5 000 $ puis 15 000 $ de recettes cumulées, +7 500 $ chacun)</dd>
         <dt>Trésorerie</dt><dd>${dollars(c.tresorerie)}</dd>
