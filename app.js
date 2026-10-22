@@ -668,7 +668,7 @@ async function blocEngagements(c) {
   const prochain = prochaineCloture(c);
   const [{ data: achats }, { data: evts }] = await Promise.all([
     sb.from("achats").select("montant").eq("semaine", c.semaine_courante),
-    sb.from("evenements").select("cout_alcool, date_evt").lt("date_evt", prochain.toISOString()).gte("date_evt", new Date(prochain.getTime() - 7 * 864e5).toISOString()),
+    sb.from("evenements").select("cout_alcool, date_evt").lt("date_evt", prochain.toISOString()).is("semaine_comptee", null),
   ]);
   const fact = (achats || []).reduce((s, a) => s + Number(a.montant), 0);
   const alc = (evts || []).reduce((s, e) => s + Number(e.cout_alcool), 0);
