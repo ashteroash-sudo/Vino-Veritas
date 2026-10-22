@@ -466,3 +466,5 @@ input[type=file] { font: inherit; font-size: .9rem; margin-bottom: 18px; max-wid
 .musique { background: none; border: 1px solid rgba(216,191,143,.35); color: var(--laiton-pale); font: inherit; font-size: .85rem; padding: 3px 10px; cursor: pointer; }
 .musique[aria-pressed=true] { color: var(--laiton); border-color: var(--laiton); }
 .musique:focus-visible { outline: 2px solid var(--laiton); outline-offset: 2px; }
+.plafond { font-size: .88rem; color: var(--encre-pale); margin: 6px 0 0; }
+.avis-dette { margin-top: 12px; }

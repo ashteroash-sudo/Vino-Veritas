@@ -377,6 +377,12 @@ async function vueCompte(cible) {
   const locaux = await chargerLocaux();
   const local = locaux.find((l) => l.id === c.local_id);
   const disponible = Number(c.ligne_credit) - Number(c.credit_utilise);
+  const dette = Number(c.credit_utilise);
+  const { data: dernieres } = await sb.from("semaines").select("numero, resume").not("cloturee_le", "is", null)
+    .order("numero", { ascending: false }).limit(1);
+  const derniere = dernieres?.[0];
+  const resultat = derniere?.resume?.resultat != null ? Number(derniere.resume.resultat) : null;
+  const signe = (n) => (n > 0 ? "+" : "") + dollars(n);
   etat.ongletGerant ??= "compte";
   cible.innerHTML = `
     <section class="feuille entete-compte">
@@ -387,10 +393,12 @@ async function vueCompte(cible) {
       ${c.devise ? `<p><em>${esc(c.devise)}</em></p>` : ""}
       ${local ? `<p class="adresse-cercle">${esc(local.titre)}, ${esc(local.adresse)}</p>` : ""}
       <div class="solde">
+        <div><span class="valeur ${dette > 0 ? "negatif" : ""}">${dollars(dette)}</span><span class="intitule">Dette envers Calloway &amp; Sons</span></div>
         <div><span class="valeur">${dollars(c.tresorerie)}</span><span class="intitule">Trésorerie du cercle</span></div>
-        <div><span class="valeur">${dollars(disponible)}</span><span class="intitule">Crédit encore disponible</span></div>
-        ${local ? `<div><span class="valeur">${dollars(local.loyer_hebdo)}</span><span class="intitule">Loyer hebdomadaire</span></div>` : ""}
+        ${resultat != null ? `<div><span class="valeur ${resultat < 0 ? "negatif" : "positif"}">${signe(resultat)}</span><span class="intitule">Résultat de la semaine ${derniere.numero}</span></div>` : ""}
       </div>
+      <p class="plafond">Plafond de crédit : encore ${dollars(Math.max(0, disponible))} avant incident de paiement.${local ? ` Loyer : ${dollars(local.loyer_hebdo)} par semaine.` : ""}</p>
+      ${dette > Number(c.ligne_credit) / 2 ? `<p class="avis avis-dette">La Maison note que votre encours atteint un niveau qui retient son attention. Elle ne doute pas que vous saurez y remédier.</p>` : ""}
     </section>
     <div id="lettre-vance"></div>
     <div id="incident"></div>
