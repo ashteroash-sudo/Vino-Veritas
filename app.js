@@ -57,6 +57,30 @@ function messageErreur(e) {
   return m;
 }
 
+/* ---------- Boîtes de dialogue maison (remplacent les fenêtres du navigateur) ---------- */
+const dlg = document.getElementById("dialogue");
+function demander(texte, { ok = "Confirmer", annuler = "Annuler" } = {}) {
+  return new Promise((resoudre) => {
+    dlg.querySelector(".dialogue-texte").textContent = texte;
+    const bOk = dlg.querySelector("[data-ok]"), bNon = dlg.querySelector("[data-non]");
+    bOk.textContent = ok; bNon.textContent = annuler; bNon.hidden = false;
+    const fin = (v) => { dlg.close(); bOk.onclick = bNon.onclick = dlg.oncancel = null; resoudre(v); };
+    bOk.onclick = () => fin(true); bNon.onclick = () => fin(false);
+    dlg.oncancel = (e) => { e.preventDefault(); fin(false); };
+    dlg.showModal(); bOk.focus();
+  });
+}
+function informer(texte) {
+  return new Promise((resoudre) => {
+    dlg.querySelector(".dialogue-texte").textContent = texte;
+    const bOk = dlg.querySelector("[data-ok]"), bNon = dlg.querySelector("[data-non]");
+    bOk.textContent = "Bien noté"; bNon.hidden = true;
+    const fin = () => { dlg.close(); bOk.onclick = dlg.oncancel = null; resoudre(); };
+    bOk.onclick = fin; dlg.oncancel = (e) => { e.preventDefault(); fin(); };
+    dlg.showModal(); bOk.focus();
+  });
+}
+
 /* ---------- Données ---------- */
 async function chargerCercle() {
   const { data, error } = await sb.from("cercle").select("*").eq("id", 1).single();
@@ -323,7 +347,7 @@ async function vueFondation(cible) {
     const choix = form.querySelector("input[name=local]:checked");
     if (!choix) { form.querySelector("#erreur").textContent = "Choisissez d'abord un local."; return; }
     const local = locaux.find((l) => l.id === choix.value);
-    if (!confirm(`Fonder le cercle « ${form.nom.value.trim()} » et signer le bail de ${local.titre} (${dollars(local.loyer_hebdo)} par semaine) ?`)) return;
+    if (!await demander(`Fonder le cercle « ${form.nom.value.trim()} » et signer le bail de ${local.titre} (${dollars(local.loyer_hebdo)} par semaine) ?`)) return;
     const btn = form.querySelector("button[type=submit]");
     btn.disabled = true;
     const { data, error } = await sb.rpc("fonder_cercle", { p_nom: form.nom.value, p_devise: form.devise.value, p_local: choix.value });
@@ -410,11 +434,11 @@ async function blocIncident(boite, actualiser) {
     const mode = b.dataset.inc;
     const q = mode === "membre" ? `Demander à ${b.dataset.nom} de s'en occuper ? Il attendra sans doute un geste en retour.`
       : mode === "jet" ? "Vous en charger vous-même ? Si cela tourne mal, la note sera plus salée." : `Payer ${dollars(inc.cout_payer)} pour régler l'affaire ?`;
-    if (!confirm(q)) return;
+    if (!await demander(q)) return;
     boite.querySelectorAll("button").forEach((x) => { x.disabled = true; });
     const { data, error } = await sb.rpc("resoudre_incident", { p_id: inc.id, p_mode: mode, p_membre: b.dataset.membre || null });
     if (error) { boite.querySelector("#erreur-inc").textContent = messageErreur(error); boite.querySelectorAll("button").forEach((x) => { x.disabled = false; }); return; }
-    alert(data);
+    informer(data);
     actualiser();
   };
 }
@@ -474,7 +498,7 @@ async function lettreVance(boite, c, actualiser) {
     const msg = action === "refuser" ? "Décliner la demande de M. Vance ? Il pourrait s'en souvenir."
       : d.type === "presentation" ? "Le membre présenté quittera le cercle pour l'entourage de M. Vance : sa cotisation et ses dépenses ne vous reviendront plus. Confirmer ?"
       : "Accepter de rendre ce service à M. Vance ?";
-    if (!confirm(msg)) return;
+    if (!await demander(msg)) return;
     const { error } = await sb.rpc("repondre_vance", { p_id: d.id, p_accepter: action !== "refuser", p_substitut: sub });
     if (error) { boite.querySelector("#erreur-vance").textContent = messageErreur(error); return; }
     actualiser();
@@ -518,7 +542,7 @@ async function ongletReleve(boite, c, actualiser) {
     ev.preventDefault();
     const m = Number(ev.target.remb.value);
     if (!(m > 0)) return;
-    if (!confirm(`Rembourser ${dollars(m)} à Calloway & Sons ?`)) return;
+    if (!await demander(`Rembourser ${dollars(m)} à Calloway & Sons ?`)) return;
     const { error } = await sb.rpc("rembourser_credit", { p_montant: m });
     if (error) { ev.target.querySelector(".statut").textContent = messageErreur(error); return; }
     actualiser();
@@ -651,7 +675,7 @@ async function ongletCave(boite, c, actualiser) {
     const { n, m } = recalcul();
     const lignes = [...form.querySelectorAll(".q-panier")].filter((i) => Number(i.value) > 0)
       .map((i) => ({ produit: i.dataset.produit, quantite: Number(i.value) }));
-    if (!confirm(`Commander ${n} bouteilles pour ${dollars(m)} ? La facture sera réglée au relevé du mardi.`)) return;
+    if (!await demander(`Commander ${n} bouteilles pour ${dollars(m)} ? La facture sera réglée au relevé du mardi.`)) return;
     const { error } = await sb.rpc("commander_panier", { p_lignes: lignes });
     if (error) { form.querySelector("#erreur-cave").textContent = messageErreur(error); return; }
     actualiser();
@@ -697,7 +721,7 @@ async function ongletAmenagements(boite, c, actualiser) {
     const b = ev.target.closest("[data-acheter]");
     if (!b) return;
     const modele = Number(boite.querySelector(`input[name="m-${b.dataset.acheter}"]:checked`)?.value || 1);
-    if (!confirm(`Acquérir « ${b.dataset.nom} » (modèle ${modele}) pour ${dollars(b.dataset.prix)} ?`)) return;
+    if (!await demander(`Acquérir « ${b.dataset.nom} » (modèle ${modele}) pour ${dollars(b.dataset.prix)} ?`)) return;
     b.disabled = true;
     const { error } = await sb.rpc("acheter_amenagement", { p_slug: b.dataset.acheter, p_modele: modele });
     if (error) { b.disabled = false; boite.querySelector("#erreur-amen").textContent = messageErreur(error); return; }
@@ -711,6 +735,9 @@ async function ongletMembres(boite, c, actualiser) {
   const candidats = liste.filter((m) => m.statut === "candidat");
   const membres = liste.filter((m) => m.statut === "membre");
   const chezVance = liste.filter((m) => m.statut === "vance");
+  const { count: pris } = await sb.from("observations").select("id", { count: "exact", head: true }).eq("semaine", c.semaine_courante);
+  const restants = Math.max(0, 2 - (pris || 0));
+  etat.plusDeRenseignements = restants === 0;
   boite.innerHTML = `
     <form id="f-cotisation" class="ligne-cotisation">
       <label for="cotisation">Cotisation mensuelle ($), prélevée le premier mardi du mois</label>
@@ -719,10 +746,13 @@ async function ongletMembres(boite, c, actualiser) {
       <p class="clause-discrete">Le montant décide de qui frappe à votre porte : trop élevé, les bourses modestes renoncent ; trop modeste, les grandes fortunes jugent le cercle indigne d'elles.</p>
     </form>
     <h2>Candidatures de la semaine</h2>
+    ${c.semaine_courante > 0 ? `<p class="avis renseignements">${restants > 0
+      ? `Renseignements disponibles cette semaine : <strong>${restants} sur 2</strong>. Cliquez sur « Se renseigner » sur un candidat pour en apprendre davantage avant de l'admettre.`
+      : `Vous avez utilisé vos deux renseignements de la semaine. Vous pourrez en prendre d'autres après le prochain relevé.`}</p>` : ""}
     ${c.semaine_courante === 0 ? `<p class="clause-discrete">Les premières candidatures arriveront le ${jourHeure(c.date_debut)}.</p>`
       : candidats.length ? candidats.map((m) => ficheCandidat(m)).join("")
       : `<p class="clause-discrete">Aucune candidature en attente. De nouveaux noms vous seront proposés au prochain relevé.</p>`}
-    <p class="clause-discrete">Vous pouvez prendre des renseignements deux fois par semaine. Une candidature sans réponse au relevé suivant est retirée.</p>
+    <p class="clause-discrete">Une candidature sans réponse au relevé suivant est retirée.</p>
     <h2>Membres du cercle (${membres.length})</h2>
     ${membres.length ? membres.map((m) => ficheMembre(m)).join("") : `<p class="clause-discrete">Le cercle n'a pas encore de membres.</p>`}
     ${chezVance.length ? `<h2>Dans l'entourage de M. Vance</h2><p class="clause-discrete">${chezVance.map((m) => esc(m.nom)).join(", ")}. Ils ne fréquentent plus le cercle.</p>` : ""}
@@ -742,18 +772,18 @@ async function ongletMembres(boite, c, actualiser) {
     let r;
     if (b.dataset.action === "observer") r = await sb.rpc("observer_candidat", { p_slug: slug });
     else if (b.dataset.action === "accepter") r = await sb.rpc("repondre_candidat", { p_slug: slug, p_accepter: true });
-    else if (b.dataset.action === "decliner") { if (!confirm(`Décliner la candidature de ${nom} ?`)) return; r = await sb.rpc("repondre_candidat", { p_slug: slug, p_accepter: false }); }
-    else if (b.dataset.action === "exclure") { if (!confirm(`Exclure ${nom} du cercle ? Les autres membres le remarqueront, et il ne reviendra pas.`)) return; r = await sb.rpc("exclure_membre", { p_slug: slug }); }
-    else if (b.dataset.action === "nourrir") { if (!confirm(`Vous nourrir sur ${nom} ? Il ne pourra plus venir au cercle pendant deux semaines.`)) return; r = await sb.rpc("se_nourrir", { p_slug: slug }); }
+    else if (b.dataset.action === "decliner") { if (!await demander(`Décliner la candidature de ${nom} ?`)) return; r = await sb.rpc("repondre_candidat", { p_slug: slug, p_accepter: false }); }
+    else if (b.dataset.action === "exclure") { if (!await demander(`Exclure ${nom} du cercle ? Les autres membres le remarqueront, et il ne reviendra pas.`)) return; r = await sb.rpc("exclure_membre", { p_slug: slug }); }
+    else if (b.dataset.action === "nourrir") { if (!await demander(`Vous nourrir sur ${nom} ? Il ne pourra plus venir au cercle pendant deux semaines.`)) return; r = await sb.rpc("se_nourrir", { p_slug: slug }); }
     if (r?.error) { erreur.textContent = messageErreur(r.error); return; }
     if (b.dataset.action === "nourrir") {
       const { data: apres } = await sb.rpc("mes_membres");
       const lui = apres?.find((x) => x.slug === slug);
-      alert(lui?.anemie
+      informer(lui?.anemie
         ? `Vous vous êtes nourri sur ${nom}. Il se sentira faible et ne viendra pas au cercle pendant deux semaines.`
         : `Le sang de ${nom} ne passe pas : il ne correspond pas à ce que votre sang exige.`);
     }
-    if (b.dataset.action === "observer" && r?.data) alert(r.data);
+    if (b.dataset.action === "observer" && r?.data) informer(r.data);
     actualiser();
   };
 }
@@ -769,7 +799,7 @@ function ficheCandidat(m) {
         ${m.indices?.length ? `<ul class="indices">${m.indices.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
         <div class="actions">
           <button class="bouton" data-action="accepter" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Admettre</button>
-          <button class="bouton-second" data-action="observer" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Se renseigner</button>
+          <button class="bouton-second" data-action="observer" data-slug="${m.slug}" data-nom="${esc(m.nom)}" ${etat.plusDeRenseignements ? "disabled" : ""}>Se renseigner</button>
           <button class="lien-discret" data-action="decliner" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Décliner</button>
         </div>
       </div>
@@ -830,8 +860,8 @@ async function ongletPersonnel(boite, c, actualiser) {
     const e = ev.target.closest("[data-embaucher]"), q = ev.target.closest("[data-congedier]");
     if (!e && !q) return;
     let r;
-    if (e) { if (!confirm(`Embaucher ${e.dataset.nom} ?`)) return; r = await sb.rpc("embaucher", { p_slug: e.dataset.embaucher }); }
-    else { if (!confirm(`Congédier ${q.dataset.nom} ? Il ne reviendra pas.`)) return; r = await sb.rpc("congedier", { p_slug: q.dataset.congedier }); }
+    if (e) { if (!await demander(`Embaucher ${e.dataset.nom} ?`)) return; r = await sb.rpc("embaucher", { p_slug: e.dataset.embaucher }); }
+    else { if (!await demander(`Congédier ${q.dataset.nom} ? Il ne reviendra pas.`)) return; r = await sb.rpc("congedier", { p_slug: q.dataset.congedier }); }
     if (r.error) { boite.querySelector("#erreur-perso").textContent = messageErreur(r.error); return; }
     actualiser();
   };
@@ -945,7 +975,7 @@ async function vueMJ() {
   if (c.statut === "actif") pupitreVance(cible.querySelector("#mj-vance"), c, () => vueMJ());
   if (c.statut === "actif") pupitreIncidents(cible.querySelector("#mj-incidents"), () => vueMJ());
   cible.querySelector("#mj-avancer")?.addEventListener("click", async () => {
-    if (!confirm("Clôturer la semaine en cours maintenant ? Le relevé sera calculé et une nouvelle semaine commencera.")) return;
+    if (!await demander("Clôturer la semaine en cours maintenant ? Le relevé sera calculé et une nouvelle semaine commencera.")) return;
     const { error } = await sb.rpc("mj_avancer_semaine"); if (error) return err(error);
     await chargerCercle(); vueMJ();
   });
@@ -960,7 +990,7 @@ async function vueMJ() {
     await chargerCercle(); vueMJ();
   });
   cible.querySelector("#reinit").addEventListener("click", async () => {
-    if (!confirm("Tout effacer pour revenir à l'invitation : signature, nom, bail, vitrine, membres, personnel, relevés et journal ?")) return;
+    if (!await demander("Tout effacer pour revenir à l'invitation : signature, nom, bail, vitrine, membres, personnel, relevés et journal ?")) return;
     const { data, error } = await sb.rpc("reinitialiser_cercle");
     if (!error) {
       const tout = "00000000-0000-0000-0000-000000000000";
@@ -1234,12 +1264,12 @@ async function adminVitrine(boite, catalogue) {
 
   boite.onclick = async (ev) => {
     const b = ev.target.closest("[data-retirer-evt],[data-retirer-produit],[data-retirer-photo]");
-    if (!b || !confirm("Retirer cet élément de la vitrine ?")) return;
+    if (!b || !await demander("Retirer cet élément de la vitrine ?")) return;
     let r;
     if (b.dataset.retirerEvt) r = await sb.from("evenements").delete().eq("id", b.dataset.retirerEvt);
     else if (b.dataset.retirerProduit) r = await sb.from("vitrine_produits").delete().eq("produit_id", b.dataset.retirerProduit);
     else r = await sb.from("vitrine_photos").delete().eq("id", b.dataset.retirerPhoto);
-    if (r.error) return alert(messageErreur(r.error));
+    if (r.error) return informer(messageErreur(r.error));
     recharger();
   };
 }
@@ -1316,7 +1346,7 @@ async function pupitreIncidents(boite, recharger) {
   boite.querySelector("#f-incident")?.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const { error } = await sb.rpc("mj_incident", { p_slug: ev.target["i-slug"].value });
-    if (error) { alert(messageErreur(error)); return; }
+    if (error) { informer(messageErreur(error)); return; }
     recharger();
   });
 }
@@ -1358,9 +1388,9 @@ async function pupitreVance(boite, c, recharger) {
   f["v-type"].addEventListener("change", maj); maj();
   f.addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    if (f["v-type"].value === "courtoisie" && !f["v-message"].value.trim()) { alert("Écris le service que Vance demande."); return; }
+    if (f["v-type"].value === "courtoisie" && !f["v-message"].value.trim()) { informer("Écris le service que Vance demande."); return; }
     const { error } = await sb.rpc("mj_demande_vance", { p_type: f["v-type"].value, p_membre: f["v-membre"].value || null, p_message: f["v-message"].value });
-    if (error) { alert(messageErreur(error)); return; }
+    if (error) { informer(messageErreur(error)); return; }
     recharger();
   });
 }
