@@ -19,7 +19,7 @@ async function afficher() {
   document.title = `${v.nom} — cercle privé, Miller Beach`;
   const photosLocal = (v.local?.photos || []).map((c) => ({ chemin: c, legende: null }));
   const fond = urlImage(photosLocal[0]?.chemin);
-  const salon = [...(v.photos || []), ...photosLocal.slice(1)];
+  const salon = [...(v.photos || []), ...(v.amenagements || []), ...photosLocal.slice(1)];
 
   racine.innerHTML = `
     <header class="ouverture">

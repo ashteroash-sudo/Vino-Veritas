@@ -335,7 +335,7 @@ async function vueFondation(cible) {
   });
 }
 
-const ONGLETS_GERANT = [["compte", "Compte"], ["membres", "Membres"], ["personnel", "Personnel"], ["cave", "Cave"], ["vitrine", "Vitrine"]];
+const ONGLETS_GERANT = [["compte", "Compte"], ["membres", "Membres"], ["personnel", "Personnel"], ["cave", "Cave"], ["amenagements", "Aménagements"], ["vitrine", "Vitrine"]];
 const LIBELLE_POSTE = { hote: "Hôte d'accueil", serveur: "Service en salle", barman: "Bar et sommellerie", portier: "Porte et sécurité" };
 const jourHeure = (d) => new Date(d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) + " à 19 h";
 const portrait = (dossier, slug, nom) =>
@@ -389,6 +389,7 @@ async function afficherOngletGerant(boite, c, actualiser) {
     else if (etat.ongletGerant === "membres") await ongletMembres(boite, c, actualiser);
     else if (etat.ongletGerant === "personnel") await ongletPersonnel(boite, c, actualiser);
     else if (etat.ongletGerant === "vitrine") await adminVitrine(boite, await chargerCatalogue());
+    else if (etat.ongletGerant === "amenagements") await ongletAmenagements(boite, c, actualiser);
     else await ongletCave(boite, c, actualiser);
   } catch (e) { boite.innerHTML = `<p class="erreur">${esc(messageErreur(e))}</p>`; }
 }
@@ -536,6 +537,53 @@ async function ongletCave(boite, c, actualiser) {
     if (error) { form.querySelector("#erreur-cave").textContent = messageErreur(error); return; }
     actualiser();
   });
+}
+
+const CATEGORIES_AMEN = [["mobilier", "Mobilier"], ["service", "Service et éclairage"], ["tenues", "Tenues du personnel"]];
+async function ongletAmenagements(boite, c, actualiser) {
+  const [{ data: articles, error }, { data: achetes }] = await Promise.all([
+    sb.from("amenagements").select("*").order("ordre"),
+    sb.from("amenagements_achetes").select("*"),
+  ]);
+  if (error) throw error;
+  const possede = Object.fromEntries((achetes || []).map((a) => [a.slug, a]));
+  const dispo = Number(c.tresorerie) + Number(c.ligne_credit) - Number(c.credit_utilise);
+  const fiche = (a) => {
+    const p = possede[a.slug];
+    const bloque = c.standing < a.standing_requis;
+    return `
+      <article class="article-amen ${p ? "possede" : ""} ${bloque ? "bloque" : ""}">
+        <div class="modeles">
+          ${[1, 2].map((m) => `
+            <label class="modele">
+              <input type="radio" name="m-${a.slug}" value="${m}" ${(p ? p.modele === m : m === 1) ? "checked" : ""} ${p || bloque ? "disabled" : ""}>
+              <img src="img/amenagements/${a.slug}-${m}.jpg" alt="${esc(a.nom)}, modèle ${m}" loading="lazy">
+            </label>`).join("")}
+        </div>
+        <h3>${esc(a.nom)}</h3>
+        <p class="clause-discrete">${esc(a.description)}</p>
+        <div class="actions">
+          ${p ? `<span class="acquis">Acquis${p.semaine ? `, semaine ${p.semaine}` : ""}</span>`
+            : bloque ? `<span class="clause-discrete">Ce fournisseur ne travaille qu'avec des établissements mieux établis.</span>`
+            : `<span class="prix">${dollars(a.prix)}</span><button class="bouton-second" data-acheter="${a.slug}" data-nom="${esc(a.nom)}" data-prix="${a.prix}">Acquérir</button>`}
+        </div>
+      </article>`;
+  };
+  boite.innerHTML = `
+    <h2>Aménager le cercle</h2>
+    <p class="clause-discrete">Chaque pièce existe en deux modèles : choisissez celui qui vous plaît avant d'acquérir. Le paiement est immédiat, sur la trésorerie puis sur la ligne de crédit si nécessaire (disponible : ${dollars(dispo)}). Les pièces acquises apparaissent dans le salon de votre vitrine.</p>
+    ${CATEGORIES_AMEN.map(([k, t]) => `<h3 class="fournisseur-titre">${t}</h3><div class="grille-amen">${articles.filter((a) => a.categorie === k).map(fiche).join("")}</div>`).join("")}
+    <p class="erreur" id="erreur-amen" aria-live="polite"></p>`;
+  boite.onclick = async (ev) => {
+    const b = ev.target.closest("[data-acheter]");
+    if (!b) return;
+    const modele = Number(boite.querySelector(`input[name="m-${b.dataset.acheter}"]:checked`)?.value || 1);
+    if (!confirm(`Acquérir « ${b.dataset.nom} » (modèle ${modele}) pour ${dollars(b.dataset.prix)} ?`)) return;
+    b.disabled = true;
+    const { error } = await sb.rpc("acheter_amenagement", { p_slug: b.dataset.acheter, p_modele: modele });
+    if (error) { b.disabled = false; boite.querySelector("#erreur-amen").textContent = messageErreur(error); return; }
+    actualiser();
+  };
 }
 
 async function ongletMembres(boite, c, actualiser) {
@@ -797,6 +845,7 @@ async function vueMJ() {
         sb.from("offres_produits").delete().gte("semaine", -1),
         sb.from("achats").delete().gte("id", 0),
         sb.from("cave").delete().gte("quantite", 0),
+        sb.from("amenagements_achetes").delete().neq("slug", ""),
       ]);
       await sb.from("journal").delete().gte("id", 0);
     }
