@@ -583,6 +583,7 @@ async function afficherOngletGerant(boite, c, actualiser) {
 }
 
 function prochaineCloture(c) {
+  if (c.cloture_prevue) return new Date(c.cloture_prevue);
   if (!c.date_debut) return null;
   const d = new Date(c.date_debut);
   d.setDate(d.getDate() + c.semaine_courante * 7);   // en jours calendaires : reste à 19 h malgré le changement d'heure
@@ -1004,7 +1005,7 @@ async function vueMJ() {
       ${c.statut === "actif" ? `
       <h2>Calendrier</h2>
       <div class="actions">
-        <button class="bouton-second" id="mj-avancer">Avancer d'une semaine (clôturer maintenant)</button>
+        <button class="bouton-second" id="mj-avancer">Clôturer la semaine maintenant</button>
         <button class="bouton-second" id="mj-pause">${c.en_pause ? "Relancer le calendrier" : "Mettre en pause"}</button>
       </div>
       <h2>Incidents</h2>
@@ -1040,7 +1041,7 @@ async function vueMJ() {
   if (c.statut === "actif") pupitreVance(cible.querySelector("#mj-vance"), c, () => vueMJ());
   if (c.statut === "actif") pupitreIncidents(cible.querySelector("#mj-incidents"), () => vueMJ());
   cible.querySelector("#mj-avancer")?.addEventListener("click", async () => {
-    if (!await demander("Clôturer la semaine en cours maintenant ? Le relevé sera calculé et une nouvelle semaine commencera.")) return;
+    if (!await demander("Clôturer la semaine en cours maintenant ? Le relevé sera calculé et la semaine suivante courra jusqu’au prochain mardi 19 h.")) return;
     const { error } = await sb.rpc("mj_avancer_semaine"); if (error) return err(error);
     await chargerCercle(); vueMJ();
   });
