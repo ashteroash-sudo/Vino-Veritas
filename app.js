@@ -394,6 +394,7 @@ async function vueCompte(cible) {
     <div id="incident"></div>
     <div class="onglets onglets-gerant" role="tablist">
       ${ONGLETS_GERANT.map(([k, t]) => `<button class="onglet" role="tab" data-onglet-g="${k}" aria-selected="${etat.ongletGerant === k}">${t}</button>`).join("")}
+      <button class="onglet onglet-aide" id="aide-onglet" title="À quoi sert cet onglet ?" aria-label="À quoi sert cet onglet ?">?</button>
     </div>
     <section class="feuille" id="contenu-gerant"></section>`;
   const boite = cible.querySelector("#contenu-gerant");
@@ -404,6 +405,7 @@ async function vueCompte(cible) {
     cible.querySelectorAll("[data-onglet-g]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
     afficherOngletGerant(boite, c, actualiser);
   }));
+  cible.querySelector("#aide-onglet").addEventListener("click", () => montrerAide(etat.ongletGerant, true));
   await Promise.all([afficherOngletGerant(boite, c, actualiser), lettreVance(cible.querySelector("#lettre-vance"), c, actualiser),
     blocIncident(cible.querySelector("#incident"), actualiser)]);
 }
@@ -505,7 +507,54 @@ async function lettreVance(boite, c, actualiser) {
   };
 }
 
+// Petits guides affichés la première fois qu'on ouvre chaque onglet, rappelables avec « ? »
+const AIDES = {
+  compte: `Le compte du cercle.
+
+Chaque mardi à 19 h, la Maison arrête un relevé : loyer, salaires, factures et alcool des soirées sont débités ; cotisations, consommations au bar et soirées sont encaissées. Le tableau Entrées / Sorties montre d'où vient l'argent et où il part.
+
+Si la trésorerie passe sous zéro, la Maison avance l'argent sur votre ligne de crédit. Remboursez-la quand vous le pouvez : une dette qui dure finit par avoir des conséquences.`,
+  membres: `Les membres font vivre le cercle.
+
+Chaque semaine, de nouveaux candidats se présentent. Avant de les admettre, « Se renseigner » (deux fois par semaine) révèle un détail sur eux : tous ne sont pas ce qu'ils paraissent.
+
+Pourquoi refuser quelqu'un ? Le salon a une capacité limitée et un cercle bondé mécontente tout le monde ; surtout, on juge un cercle à ceux qu'on y croise. Des membres modestes font du cercle un bar de quartier et éloignent les grandes fortunes ; des membres prestigieux attirent leurs semblables.
+
+La cotisation décide de qui frappe à votre porte : trop chère, les bourses modestes renoncent ; trop modeste, les grandes fortunes jugent le cercle indigne d'elles. Mais elle ne suffit pas : les personnalités les plus en vue ne se présentent qu'à un cercle déjà réputé.
+
+Une fois admis, un membre peut vous rendre service grâce à ses relations. Et vous pouvez vous nourrir sur lui, à vos risques.`,
+  personnel: `Le personnel.
+
+Une agence vous transmet chaque semaine quelques dossiers. Un barman fait tourner le bar, des serveurs permettent d'accueillir du monde aux soirées, un hôte d'accueil fait venir les membres, un portier garde la porte.
+
+Chaque employé coûte un salaire chaque semaine. Les plus expérimentés coûtent plus cher, mais rehaussent le cercle. Et chacun voit ce qui se passe au cercle…`,
+  cave: `La cave.
+
+Commandez chaque semaine de 5 à 15 bouteilles dans le catalogue de la Maison. Elles sont livrées tout de suite et facturées au relevé du mardi.
+
+Le bar puise dans la cave : sans bouteilles, il ne rapporte presque rien. Ce qui n'est pas bu reste en cave d'une semaine à l'autre. Une cave variée et quelques belles références font la réputation d'un cercle, et les membres y dépensent davantage.`,
+  amenagements: `Les aménagements.
+
+Mobilier, service et tenues du personnel donnent au cercle son rang. Chaque pièce existe en deux modèles : choisissez celui qui vous plaît.
+
+Les plus belles pièces ne sont proposées qu'aux cercles déjà établis. Certaines rendent aussi les soirées plus agréables, ou le cercle plus discret.`,
+  vitrine: `La vitrine.
+
+C'est la page publique de votre cercle, celle que verra quiconque en connaît l'adresse. Présentez l'esprit du cercle, annoncez vos soirées et mettez en avant vos bouteilles.
+
+Une soirée a un coût en alcool, débité au relevé, et un prix de participation que vous fixez : trop cher, les membres modestes restent chez eux. Les membres viennent plus volontiers quand le thème correspond à leurs goûts.`,
+};
+function montrerAide(onglet, force = false) {
+  const cle = "vv-aide-" + onglet;
+  let vu = false;
+  try { vu = localStorage.getItem(cle) === "1"; } catch {}
+  if (vu && !force) return;
+  try { localStorage.setItem(cle, "1"); } catch {}
+  if (AIDES[onglet]) informer(AIDES[onglet]);
+}
+
 async function afficherOngletGerant(boite, c, actualiser) {
+  if (etat.role !== "mj") montrerAide(etat.ongletGerant);
   boite.onclick = null; boite.onsubmit = null;
   boite.innerHTML = `<p class="chargement">Un instant…</p>`;
   try {
@@ -833,6 +882,7 @@ async function ongletPersonnel(boite, c, actualiser) {
   const masse = (equipe || []).reduce((t, p) => t + Number(p.salaire_hebdo), 0);
   boite.innerHTML = `
     <h2>Candidatures transmises par Lakeshore Staffing</h2>
+    <p class="avis">Le personnel coûte un salaire chaque semaine, mais sans lui le cercle tourne mal : <strong>sans barman, le bar rapporte moitié moins</strong> ; <strong>sans serveur, une soirée ne peut pas accueillir plus de six invités</strong>. Un hôte d'accueil fait venir davantage de membres aux soirées, un portier garde la porte. Les profils les plus expérimentés coûtent plus cher, et font briller le cercle.</p>
     ${c.semaine_courante === 0 ? `<p class="clause-discrete">L'agence vous transmettra ses premiers dossiers le ${jourHeure(c.date_debut)}.</p>`
       : disponibles.length ? disponibles.map((p) => `
         <article class="fiche-perso">
@@ -854,7 +904,7 @@ async function ongletPersonnel(boite, c, actualiser) {
           <div class="origine">${LIBELLE_POSTE[p.poste]}, ${dollars(p.salaire_hebdo)} par semaine</div>
           <div class="actions"><button class="lien-discret" data-congedier="${p.slug}" data-nom="${esc(p.nom)}">Congédier</button></div>
         </div>
-      </article>`).join("") : `<p class="clause-discrete">Personne ne travaille encore au cercle. Sans barman, le bar rapporte moitié moins ; sans serveur, une soirée ne peut pas accueillir plus de six invités.</p>`}
+      </article>`).join("") : `<p class="clause-discrete">Personne ne travaille encore au cercle.</p>`}
     <p class="erreur" id="erreur-perso" aria-live="polite"></p>`;
   boite.onclick = async (ev) => {
     const e = ev.target.closest("[data-embaucher]"), q = ev.target.closest("[data-congedier]");

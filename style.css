@@ -460,3 +460,6 @@ input[type=file] { font: inherit; font-size: .9rem; margin-bottom: 18px; max-wid
 .dialogue-texte { margin: 0 0 18px; line-height: 1.55; white-space: pre-line; }
 .dialogue .actions { justify-content: flex-end; }
 .renseignements { margin-top: -6px; }
+.onglet-aide { margin-left: auto; min-width: 42px; font-weight: 600; }
+.dialogue { max-width: min(560px, calc(100vw - 32px)); max-height: 85vh; overflow-y: auto; }
+.dialogue-texte::first-line { font-family: var(--serif-titre); font-size: 1.2em; }
