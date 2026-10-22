@@ -427,53 +427,74 @@ async function blocEngagements(c) {
 }
 
 async function ongletCave(boite, c, actualiser) {
-  const [{ data: offres }, { data: cave }, { data: achats }, catalogue] = await Promise.all([
-    sb.from("offres_produits").select("*, produits(*, fournisseurs(nom))").eq("semaine", c.semaine_courante),
+  const [{ data: promos }, { data: cave }, { data: achats }, catalogue] = await Promise.all([
+    sb.from("offres_produits").select("*").eq("semaine", c.semaine_courante).not("promo", "is", null),
     sb.from("cave").select("quantite, produits(nom, categorie, gamme, prix_achat)").gt("quantite", 0),
-    sb.from("achats").select("produit_id, quantite").eq("semaine", c.semaine_courante),
+    sb.from("achats").select("quantite").eq("semaine", c.semaine_courante),
     chargerCatalogue(),
   ]);
-  const deja = {};
-  (achats || []).forEach((a) => { deja[a.produit_id] = (deja[a.produit_id] || 0) + a.quantite; });
-  const total = (cave || []).reduce((s, x) => s + x.quantite, 0);
-  const promo = (o) => o.promo === "remise" ? `<span class="promo">Prix spécial cette semaine</span>`
-    : o.promo === "un_offert" ? `<span class="promo">Une bouteille offerte pour une achetée</span>` : "";
+  const promo = Object.fromEntries((promos || []).map((o) => [o.produit_id, o]));
+  const deja = (achats || []).reduce((s, a) => s + a.quantite, 0);
+  const reste = 15 - deja;
+  const confiance = c.standing >= 30;
+  const totalCave = (cave || []).reduce((s, x) => s + x.quantite, 0);
+  const prixDe = (p) => promo[p.id]?.promo === "remise" ? Number(promo[p.id].prix) : Number(p.prix_achat);
+  const ligneProduit = (p) => {
+    const o = promo[p.id];
+    const bloque = p.gamme === "rare" && !confiance;
+    return `
+      <div class="offre">
+        <div>
+          <strong>${esc(p.nom)}</strong>${p.age ? `, ${esc(p.age)}` : ""}
+          ${o?.promo === "remise" ? `<span class="promo">Prix spécial cette semaine</span>` : o?.promo === "un_offert" ? `<span class="promo">Une bouteille offerte pour une achetée</span>` : ""}<br>
+          <span class="clause-discrete">${esc(p.categorie)}. ${esc(p.description)}</span>
+        </div>
+        <div class="offre-achat">
+          <span class="prix">${dollars(prixDe(p))}${o?.promo === "remise" ? ` <s>${dollars(p.prix_achat)}</s>` : ""}</span>
+          ${bloque ? `<span class="clause-discrete">Réservé aux comptes de confiance</span>`
+            : `<input type="number" class="q-panier" data-produit="${p.id}" data-prix="${prixDe(p)}" data-nom="${esc(p.nom)}" min="0" max="15" value="0" aria-label="Bouteilles de ${esc(p.nom)}">`}
+        </div>
+      </div>`;
+  };
   boite.innerHTML = `
-    <h2>Allocation de la semaine</h2>
-    ${c.semaine_courante === 0 ? `<p class="clause-discrete">Votre première allocation sera proposée le ${jourHeure(c.date_debut)}.</p>`
-      : (offres || []).length ? `
-      <p class="clause-discrete">Les bouteilles sont livrées tout de suite ; la facture est réglée au relevé du mardi. Le bar entame environ une bouteille pour trois passages : sans cave, il rapporte beaucoup moins.</p>
-      ${offres.map((o) => { const p = o.produits; const reste = o.max_bouteilles - (deja[o.produit_id] || 0); return `
-        <div class="offre">
-          <div>
-            <strong>${esc(p.nom)}</strong>${p.age ? `, ${esc(p.age)}` : ""} ${promo(o)}<br>
-            <span class="clause-discrete">${esc(p.categorie)}, ${esc(p.fournisseurs?.nom)}. ${esc(p.description)}</span>
-          </div>
-          <div class="offre-achat">
-            <span class="prix">${dollars(o.prix)}${Number(o.prix) < Number(p.prix_achat) ? ` <s>${dollars(p.prix_achat)}</s>` : ""}</span>
-            ${reste > 0 ? `<form data-commande="${o.produit_id}" data-nom="${esc(p.nom)}" data-prix="${o.prix}">
-              <input type="number" name="q" min="1" max="${reste}" value="1" aria-label="Nombre de bouteilles">
-              <button class="bouton-second" type="submit">Commander</button>
-            </form><span class="clause-discrete">${reste} disponibles</span>` : `<span class="clause-discrete">Allocation épuisée</span>`}
-          </div>
-        </div>`; }).join("")}`
-      : `<p class="clause-discrete">Aucune allocation cette semaine.</p>`}
-    <p class="erreur" id="erreur-cave" aria-live="polite"></p>
-    <h2>Votre cave (${total} bouteilles)</h2>
+    <h2>Bon de commande de la semaine</h2>
+    ${c.semaine_courante === 0 ? `<p class="clause-discrete">Les commandes ouvriront le ${jourHeure(c.date_debut)}.</p>` : `
+      <p class="clause-discrete">La Maison livre de 5 à 15 bouteilles par semaine, à choisir dans tout son catalogue. Livraison immédiate, facture réglée au relevé du mardi. Le bar entame environ une bouteille pour trois passages ; ce qui n'est pas bu reste en cave.</p>
+      <p class="avis">Déjà commandé cette semaine : ${deja} bouteille${deja > 1 ? "s" : ""}. ${reste >= 5 ? `Vous pouvez encore en commander jusqu'à ${reste}.` : "Le plafond hebdomadaire est atteint."}</p>
+      ${reste >= 5 ? `
+      <form id="f-panier">
+        ${catalogue.map((f) => `<h3 class="fournisseur-titre">${esc(f.nom)}</h3>${f.produits.map(ligneProduit).join("")}`).join("")}
+        <div class="panier-recap" aria-live="polite"><span id="panier-total">0 bouteille, 0 $</span>
+          <button class="bouton" type="submit">Passer commande</button></div>
+        <p class="erreur" id="erreur-cave"></p>
+      </form>` : ""}`}
+    <h2>Votre cave (${totalCave} bouteille${totalCave > 1 ? "s" : ""})</h2>
     ${(cave || []).length ? `<table class="table-releve">${cave.sort((a, b) => b.quantite - a.quantite).map((x) => `<tr><td>${esc(x.produits.nom)}<br><span class="clause-discrete">${esc(x.produits.categorie)}${x.produits.gamme === "rare" ? ", pièce rare" : x.produits.gamme === "premium" ? ", haut de gamme" : ""}</span></td><td>${x.quantite}</td></tr>`).join("")}</table>
       <p class="clause-discrete">Les références haut de gamme et rares en cave rehaussent le prestige du cercle, et les membres dépensent davantage au bar.</p>`
-      : `<p class="clause-discrete">Votre cave est vide.</p>`}
-    <details class="volet"><summary>Catalogue complet de nos fournisseurs</summary>${catalogue.map(blocFournisseur).join("")}</details>`;
-  boite.onsubmit = async (ev) => {
-    const f = ev.target.closest("[data-commande]");
-    if (!f) return;
-    ev.preventDefault();
-    const q = Number(f.q.value);
-    if (!confirm(`Commander ${q} × ${f.dataset.nom} pour ${dollars(q * Number(f.dataset.prix))} ?`)) return;
-    const { error } = await sb.rpc("commander", { p_produit: f.dataset.commande, p_quantite: q });
-    if (error) { boite.querySelector("#erreur-cave").textContent = messageErreur(error); return; }
-    actualiser();
+      : `<p class="clause-discrete">Votre cave est vide.</p>`}`;
+
+  const form = boite.querySelector("#f-panier");
+  if (!form) return;
+  const recalcul = () => {
+    let n = 0, m = 0;
+    form.querySelectorAll(".q-panier").forEach((i) => { const q = Math.max(0, Number(i.value) || 0); n += q; m += q * Number(i.dataset.prix); });
+    const ok = n >= 5 && n <= reste;
+    form.querySelector("#panier-total").textContent = `${n} bouteille${n > 1 ? "s" : ""}, ${dollars(m)}${n > 0 && n < 5 ? " (minimum 5)" : n > reste ? ` (maximum ${reste})` : ""}`;
+    form.querySelector("button[type=submit]").disabled = !ok;
+    return { n, m };
   };
+  form.addEventListener("input", recalcul);
+  recalcul();
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const { n, m } = recalcul();
+    const lignes = [...form.querySelectorAll(".q-panier")].filter((i) => Number(i.value) > 0)
+      .map((i) => ({ produit: i.dataset.produit, quantite: Number(i.value) }));
+    if (!confirm(`Commander ${n} bouteilles pour ${dollars(m)} ? La facture sera réglée au relevé du mardi.`)) return;
+    const { error } = await sb.rpc("commander_panier", { p_lignes: lignes });
+    if (error) { form.querySelector("#erreur-cave").textContent = messageErreur(error); return; }
+    actualiser();
+  });
 }
 
 async function ongletMembres(boite, c, actualiser) {
