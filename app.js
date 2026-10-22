@@ -485,7 +485,7 @@ async function afficherOngletGerant(boite, c, actualiser) {
   boite.onclick = null; boite.onsubmit = null;
   boite.innerHTML = `<p class="chargement">Un instant…</p>`;
   try {
-    if (etat.ongletGerant === "compte") await ongletReleve(boite, c);
+    if (etat.ongletGerant === "compte") await ongletReleve(boite, c, actualiser);
     else if (etat.ongletGerant === "membres") await ongletMembres(boite, c, actualiser);
     else if (etat.ongletGerant === "personnel") await ongletPersonnel(boite, c, actualiser);
     else if (etat.ongletGerant === "vitrine") await adminVitrine(boite, await chargerCatalogue());
@@ -501,7 +501,7 @@ function prochaineCloture(c) {
   return d;
 }
 
-async function ongletReleve(boite, c) {
+async function ongletReleve(boite, c, actualiser) {
   const [{ data: semaines }, journal] = await Promise.all([
     sb.from("semaines").select("*").not("cloturee_le", "is", null).order("numero", { ascending: false }).limit(8),
     chargerJournal(),
@@ -513,11 +513,28 @@ async function ongletReleve(boite, c) {
   const prochain = prochaineCloture(c);
   const parSemaine = {};
   (lignes || []).forEach((l) => (parSemaine[l.semaine] ??= []).push(l));
+  boite.onsubmit = async (ev) => {
+    if (ev.target.id !== "f-rembourser") return;
+    ev.preventDefault();
+    const m = Number(ev.target.remb.value);
+    if (!(m > 0)) return;
+    if (!confirm(`Rembourser ${dollars(m)} à Calloway & Sons ?`)) return;
+    const { error } = await sb.rpc("rembourser_credit", { p_montant: m });
+    if (error) { ev.target.querySelector(".statut").textContent = messageErreur(error); return; }
+    actualiser();
+  };
   boite.innerHTML = `
     ${c.en_pause ? `<p class="avis">La Maison a suspendu les relevés pour le moment.</p>`
       : c.semaine_courante === 0 ? `<p class="avis">Votre première semaine d'activité commencera le ${jourHeure(c.date_debut)}. Les premières candidatures de membres et de personnel arriveront ce jour-là.</p>`
       : `<p class="avis">Prochain relevé : le ${jourHeure(prochain)}. Le loyer, les salaires et l'alcool des soirées seront débités à ce moment-là.</p>`}
     ${await blocEngagements(c)}
+    ${Number(c.credit_utilise) > 0 ? `
+    <form id="f-rembourser" class="ligne-cotisation">
+      <label for="remb">Rembourser Calloway & Sons (vous devez ${dollars(c.credit_utilise)})</label>
+      <div class="actions"><input id="remb" type="number" min="0" step="100" max="${Math.max(0, Math.min(Number(c.tresorerie), Number(c.credit_utilise)))}" value="0">
+      <button class="bouton-second" type="submit">Rembourser</button><span class="statut" aria-live="polite"></span></div>
+      <p class="clause-discrete">Rembourser libère à nouveau du crédit pour les mauvaises semaines. Une dette qui dure finit par inquiéter la Maison, et votre garant.</p>
+    </form>` : ""}
     <h2>Relevés hebdomadaires</h2>
     ${semaines?.length ? semaines.map((s, i) => `
       <details class="releve-semaine" ${i === 0 ? "open" : ""}>
@@ -537,11 +554,12 @@ const CAT_ENTREES = [["cotisations", "Cotisations des membres"], ["bar", "Consom
 const CAT_SORTIES = [["loyer", "Loyer (coût fixe)"], ["salaires", "Personnel"], ["amenagements", "Aménagements et fournitures"], ["achats", "Achats de bouteilles"], ["alcool", "Alcool des soirées"], ["moins", "Imprévus"]];
 function bilan(lignes) {
   const t = {};
-  let credit = 0;
+  let credit = 0, rembourse = 0;
   for (const l of lignes) {
     const m = Number(l.montant);
     let cat = l.poste;
     if (cat === "credit") { credit += m; continue; }
+    if (cat === "remboursement") { rembourse += -m; continue; }
     if (cat === "imprevu" || cat === "divers" || cat === "incident") cat = m >= 0 ? "plus" : "moins";
     t[cat] = (t[cat] || 0) + Math.abs(m);
   }
@@ -553,7 +571,7 @@ function bilan(lignes) {
       <table class="table-releve"><caption>Entrées</caption>${CAT_ENTREES.map(ligne).join("")}<tr class="total"><td>Total</td><td class="positif">${dollars(ent)}</td></tr></table>
       <table class="table-releve"><caption>Sorties</caption>${CAT_SORTIES.map(ligne).join("")}<tr class="total"><td>Total</td><td class="negatif">${dollars(sor)}</td></tr></table>
     </div>
-    <p class="clause-discrete">Résultat de la semaine : <strong class="${ent - sor >= 0 ? "positif" : "negatif"}">${ent - sor >= 0 ? "+" : ""}${dollars(ent - sor)}</strong>${credit ? `. Avance prise sur la ligne de crédit : ${dollars(credit)}` : ""}.</p>`;
+    <p class="clause-discrete">Résultat de la semaine : <strong class="${ent - sor >= 0 ? "positif" : "negatif"}">${ent - sor >= 0 ? "+" : ""}${dollars(ent - sor)}</strong>${credit ? `. Avance prise sur la ligne de crédit : ${dollars(credit)}` : ""}${rembourse ? `. Remboursé à Calloway : ${dollars(rembourse)}` : ""}.</p>`;
 }
 
 async function blocEngagements(c) {
@@ -885,6 +903,8 @@ async function vueMJ() {
         <dt>Semaine</dt><dd>${c.statut !== "actif" ? "—" : c.semaine_courante === 0 ? `démarre le ${jourHeure(c.date_debut)}` : `${c.semaine_courante}, clôture le ${jourHeure(prochain)}`}${c.en_pause ? " (en pause)" : ""}</dd>
         <dt>Standing</dt><dd>${c.standing}</dd>
         <dt>Humeur de Vance</dt><dd>${c.patience_vance ?? 3}/3</dd>
+        <dt>Risque Mascarade</dt><dd>${c.risque_mascarade ?? 0}/100 <span class="clause-discrete">(alertes à 30, 60 et 90 ; chaque repas au cercle l'augmente, moins si le cercle est discret ; −3 par semaine)</span></dd>
+        <dt>Retard de paiement</dt><dd>${c.retard ? `${c.retard} semaine(s) : ${["", "rappel", "pénalités", "livraisons suspendues", "mise en demeure", "cave saisie", "Vance intervient"][Math.min(6, c.retard)]}` : "aucun"}</dd>
       </dl>
       ${c.statut === "actif" ? `
       <h2>Calendrier</h2>
