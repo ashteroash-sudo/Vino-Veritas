@@ -366,6 +366,7 @@ async function vueCompte(cible) {
         ${local ? `<div><span class="valeur">${dollars(local.loyer_hebdo)}</span><span class="intitule">Loyer hebdomadaire</span></div>` : ""}
       </div>
     </section>
+    <div id="lettre-vance"></div>
     <div class="onglets onglets-gerant" role="tablist">
       ${ONGLETS_GERANT.map(([k, t]) => `<button class="onglet" role="tab" data-onglet-g="${k}" aria-selected="${etat.ongletGerant === k}">${t}</button>`).join("")}
     </div>
@@ -378,7 +379,69 @@ async function vueCompte(cible) {
     cible.querySelectorAll("[data-onglet-g]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
     afficherOngletGerant(boite, c, actualiser);
   }));
-  await afficherOngletGerant(boite, c, actualiser);
+  await Promise.all([afficherOngletGerant(boite, c, actualiser), lettreVance(cible.querySelector("#lettre-vance"), c, actualiser)]);
+}
+
+// Le texte des lettres de Vance : le MJ peut écrire le sien, sinon une formule selon la situation
+function texteVance(d, nomMembre, patience) {
+  const debut = d.premiere
+    ? `<p>Vous n'aurez pas oublié l'article 4 de notre accord. Le moment est venu de préciser la nature de la courtoisie que vous me devez.</p>`
+    : `<p>Je reviens vers vous pour une petite affaire.</p>`;
+  const corps = d.message
+    ? `<p>${esc(d.message).replace(/\n/g, "<br>")}</p>`
+    : d.type === "presentation"
+      ? `<p>J'ai appris que ${esc(nomMembre)} fréquente votre cercle. J'aimerais beaucoup faire sa connaissance. Je compte sur vous pour me le présenter, et pour veiller à ce qu'il trouve désormais auprès de moi ce qu'il venait chercher chez vous.</p>`
+      : `<p>J'attends de vous un service, dont je vous entretiendrai de vive voix.</p>`;
+  const ton = patience <= 1 ? `<p>Je ne doute pas que, cette fois, vous saurez vous montrer à la hauteur de la confiance que je vous ai accordée.</p>` : "";
+  return `<p>Cher Monsieur Visconti,</p>${debut}${corps}${ton}`;
+}
+
+async function lettreVance(boite, c, actualiser) {
+  const { data: demandes } = await sb.from("demandes_vance").select("*").eq("statut", "en_attente").limit(1);
+  const d = demandes?.[0];
+  if (!d) { boite.innerHTML = ""; return; }
+  let nomMembre = "", autres = [];
+  const { data: liste } = await sb.rpc("mes_membres");
+  const membres = (liste || []).filter((m) => m.statut === "membre");
+  if (d.type === "presentation") {
+    nomMembre = membres.find((m) => m.slug === d.membre_slug)?.nom || "l'un de vos membres";
+    autres = membres.filter((m) => m.slug !== d.membre_slug);
+  }
+  boite.innerHTML = `
+    <article class="feuille lettre-vance">
+      <div class="en-tete-lettre"><span class="expediteur">Vance Fiduciary Trust</span><span>Par porteur</span></div>
+      ${texteVance(d, nomMembre, c.patience_vance)}
+      <div class="signature-bloc"><div class="plume">V. V.</div></div>
+      <p class="clause-discrete">Une réponse est attendue avant le prochain relevé du mardi.</p>
+      <div class="actions">
+        ${d.type === "presentation" ? `
+          <button class="bouton" data-vance="accepter">Présenter ${esc(nomMembre)} à M. Vance</button>
+          ${autres.length ? `<span class="substitut"><select id="vance-substitut" aria-label="Présenter quelqu'un d'autre">
+            <option value="">… ou présenter quelqu'un d'autre</option>
+            ${autres.map((m) => `<option value="${m.slug}">${esc(m.nom)}</option>`).join("")}
+          </select><button class="bouton-second" data-vance="substituer">Présenter cette personne</button></span>` : ""}`
+        : `<button class="bouton" data-vance="accepter">Accepter</button>`}
+        <button class="lien-discret" data-vance="refuser">Décliner poliment</button>
+      </div>
+      <p class="erreur" id="erreur-vance"></p>
+    </article>`;
+  boite.onclick = async (ev) => {
+    const b = ev.target.closest("[data-vance]");
+    if (!b) return;
+    const action = b.dataset.vance;
+    let sub = null;
+    if (action === "substituer") {
+      sub = boite.querySelector("#vance-substitut").value;
+      if (!sub) { boite.querySelector("#erreur-vance").textContent = "Choisissez qui présenter."; return; }
+    }
+    const msg = action === "refuser" ? "Décliner la demande de M. Vance ? Il pourrait s'en souvenir."
+      : d.type === "presentation" ? "Le membre présenté quittera le cercle pour l'entourage de M. Vance : sa cotisation et ses dépenses ne vous reviendront plus. Confirmer ?"
+      : "Accepter de rendre ce service à M. Vance ?";
+    if (!confirm(msg)) return;
+    const { error } = await sb.rpc("repondre_vance", { p_id: d.id, p_accepter: action !== "refuser", p_substitut: sub });
+    if (error) { boite.querySelector("#erreur-vance").textContent = messageErreur(error); return; }
+    actualiser();
+  };
 }
 
 async function afficherOngletGerant(boite, c, actualiser) {
@@ -591,6 +654,7 @@ async function ongletMembres(boite, c, actualiser) {
   if (error) throw error;
   const candidats = liste.filter((m) => m.statut === "candidat");
   const membres = liste.filter((m) => m.statut === "membre");
+  const chezVance = liste.filter((m) => m.statut === "vance");
   boite.innerHTML = `
     <form id="f-cotisation" class="ligne-cotisation">
       <label for="cotisation">Cotisation mensuelle ($), prélevée le premier mardi du mois</label>
@@ -605,6 +669,7 @@ async function ongletMembres(boite, c, actualiser) {
     <p class="clause-discrete">Vous pouvez prendre des renseignements deux fois par semaine. Une candidature sans réponse au relevé suivant est retirée.</p>
     <h2>Membres du cercle (${membres.length})</h2>
     ${membres.length ? membres.map((m) => ficheMembre(m)).join("") : `<p class="clause-discrete">Le cercle n'a pas encore de membres.</p>`}
+    ${chezVance.length ? `<h2>Dans l'entourage de M. Vance</h2><p class="clause-discrete">${chezVance.map((m) => esc(m.nom)).join(", ")}. Ils ne fréquentent plus le cercle.</p>` : ""}
     <p class="erreur" id="erreur-membres" aria-live="polite"></p>`;
 
   const erreur = boite.querySelector("#erreur-membres");
@@ -781,6 +846,7 @@ async function vueMJ() {
         <dt>Cotisation</dt><dd>${dollars(c.cotisation_mensuelle)} par mois</dd>
         <dt>Semaine</dt><dd>${c.statut !== "actif" ? "—" : c.semaine_courante === 0 ? `démarre le ${jourHeure(c.date_debut)}` : `${c.semaine_courante}, clôture le ${jourHeure(prochain)}`}${c.en_pause ? " (en pause)" : ""}</dd>
         <dt>Standing</dt><dd>${c.standing}</dd>
+        <dt>Humeur de Vance</dt><dd>${c.patience_vance ?? 3}/3</dd>
       </dl>
       ${c.statut === "actif" ? `
       <h2>Calendrier</h2>
@@ -788,6 +854,8 @@ async function vueMJ() {
         <button class="bouton-second" id="mj-avancer">Avancer d'une semaine (clôturer maintenant)</button>
         <button class="bouton-second" id="mj-pause">${c.en_pause ? "Relancer le calendrier" : "Mettre en pause"}</button>
       </div>
+      <h2>Victor Vance</h2>
+      <div id="mj-vance"></div>
       <h2>Ligne exceptionnelle</h2>
       <form id="mj-ligne" class="sous-form">
         <label for="l-libelle">Libellé (ce que verra le joueur)</label>
@@ -814,6 +882,7 @@ async function vueMJ() {
     </section>`;
   cible.querySelector("#actualiser").addEventListener("click", async () => { await chargerCercle(); vueMJ(); });
   const err = (e) => { cible.querySelector("#erreur").textContent = messageErreur(e); };
+  if (c.statut === "actif") pupitreVance(cible.querySelector("#mj-vance"), c, () => vueMJ());
   cible.querySelector("#mj-avancer")?.addEventListener("click", async () => {
     if (!confirm("Clôturer la semaine en cours maintenant ? Le relevé sera calculé et une nouvelle semaine commencera.")) return;
     const { error } = await sb.rpc("mj_avancer_semaine"); if (error) return err(error);
@@ -846,6 +915,7 @@ async function vueMJ() {
         sb.from("achats").delete().gte("id", 0),
         sb.from("cave").delete().gte("quantite", 0),
         sb.from("amenagements_achetes").delete().neq("slug", ""),
+        sb.from("demandes_vance").delete().gte("id", 0),
       ]);
       await sb.from("journal").delete().gte("id", 0);
     }
@@ -1162,6 +1232,50 @@ document.addEventListener("click", async (ev) => {
   catch { b.textContent = "Copie impossible, sélectionne le texte"; }
   setTimeout(() => { b.textContent = "Copier la description"; }, 1800);
 });
+
+/* ---------- Pupitre de Vance (MJ) ---------- */
+const PATIENCE = { 3: "cordial", 2: "réservé", 1: "froid (ligne de crédit déjà réduite)", 0: "à bout : il passe en personne" };
+const STATUT_DEMANDE = { en_attente: "en attente de réponse", acceptee: "acceptée", substituee: "acceptée avec un autre membre", refusee: "refusée", expiree: "ignorée (sans réponse)" };
+async function pupitreVance(boite, c, recharger) {
+  const [{ data: dem }, { data: ms }, { data: mj }] = await Promise.all([
+    sb.from("demandes_vance").select("*").order("id", { ascending: false }).limit(10),
+    sb.from("membres").select("slug, nom, statut").eq("statut", "membre"),
+    sb.from("membres_mj").select("slug, fortune, reseau, nourricier"),
+  ]);
+  const j = Object.fromEntries((mj || []).map((x) => [x.slug, x]));
+  const nom = Object.fromEntries((ms || []).map((x) => [x.slug, x.nom]));
+  const tries = (ms || []).sort((a, b) => (j[b.slug].fortune + j[b.slug].reseau) - (j[a.slug].fortune + j[a.slug].reseau));
+  const attente = (dem || []).some((d) => d.statut === "en_attente");
+  boite.innerHTML = `
+    <p class="clause-discrete">Humeur de Vance : <strong>${PATIENCE[c.patience_vance]}</strong> (${c.patience_vance}/3). Un refus ou une lettre ignorée lui coûte un cran, une demande honorée lui en rend un. À 1, Calloway réduit la ligne de crédit de 5 000 $. À 0, il « passe en personne ». La toute première lettre révèle la courtoisie de l'article 4.</p>
+    ${(dem || []).length ? `<ul class="journal">${dem.map((d) => `<li><time>S${d.semaine}</time>${d.type === "presentation" ? `Présentation de ${esc(nom[d.membre_slug] || d.membre_slug)}` : `Courtoisie : ${esc(d.message || "")}`}, ${STATUT_DEMANDE[d.statut]}${d.remis_slug && d.remis_slug !== d.membre_slug ? ` (remplacé par ${esc(d.remis_slug)})` : ""}</li>`).join("")}</ul>` : `<p class="clause-discrete">Aucune lettre envoyée pour l'instant.</p>`}
+    ${attente ? `<p class="clause-discrete">Une lettre attend la réponse du joueur.</p>` : `
+    <form id="f-vance" class="sous-form">
+      <label for="v-type">Nouvelle lettre</label>
+      <select id="v-type">
+        <option value="presentation">Demander à être présenté à un membre</option>
+        <option value="courtoisie">Demander un autre service (à mettre en scène en jeu)</option>
+      </select>
+      <div id="v-bloc-membre">
+        <label for="v-membre">Membre convoité (classés du plus intéressant pour Vance au moins intéressant)</label>
+        <select id="v-membre">${tries.map((m) => `<option value="${m.slug}">${esc(m.nom)} (fortune ${j[m.slug].fortune}, réseau ${j[m.slug].reseau})</option>`).join("") || `<option value="">Aucun membre au cercle</option>`}</select>
+      </div>
+      <label for="v-message">Texte de la lettre (facultatif : sinon une formule toute prête est utilisée)</label>
+      <textarea id="v-message" rows="3" placeholder="Ex. : Un de mes associés aura besoin de votre salon privé jeudi soir. Personne ne doit savoir qu'il y était."></textarea>
+      <div class="actions"><button class="bouton" type="submit">Envoyer la lettre</button></div>
+    </form>`}`;
+  const f = boite.querySelector("#f-vance");
+  if (!f) return;
+  const maj = () => { boite.querySelector("#v-bloc-membre").hidden = f["v-type"].value !== "presentation"; };
+  f["v-type"].addEventListener("change", maj); maj();
+  f.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    if (f["v-type"].value === "courtoisie" && !f["v-message"].value.trim()) { alert("Écris le service que Vance demande."); return; }
+    const { error } = await sb.rpc("mj_demande_vance", { p_type: f["v-type"].value, p_membre: f["v-membre"].value || null, p_message: f["v-message"].value });
+    if (error) { alert(messageErreur(error)); return; }
+    recharger();
+  });
+}
 
 /* ---------- Membres (MJ) ---------- */
 const STATUT_MEMBRE = { vivier: "Dans le vivier", candidat: "Candidat cette semaine", membre: "Membre", refuse: "Refusé", parti: "Parti", vance: "Passé chez Vance" };
