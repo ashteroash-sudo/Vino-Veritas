@@ -552,6 +552,8 @@ Vous y réglerez aussi les mille tracas d'un établissement de ce genre, et quel
 
 Chaque mardi à 19 h, la Maison arrête vos comptes et la semaine suivante commence. Quelques minutes par semaine suffisent, mais rien ne se fait sans vous.
 
+Ne vous y trompez pas : il s'agit d'une véritable gestion. Les dépenses tombent chaque semaine, que le cercle prospère ou non. Une faillite ne serait pas seulement la fin du cercle : quelqu'un s'est porté garant de vous, et ce genre de personne n'oublie pas ce qu'on lui doit.
+
 Chaque onglet s'explique la première fois que vous l'ouvrez ; le bouton « ? » vous rappelle ces explications à tout moment.`;
 
 function dejaVu(cle) { try { return localStorage.getItem(cle) === "1"; } catch { return false; } }
