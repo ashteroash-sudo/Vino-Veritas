@@ -367,6 +367,7 @@ async function vueCompte(cible) {
       </div>
     </section>
     <div id="lettre-vance"></div>
+    <div id="incident"></div>
     <div class="onglets onglets-gerant" role="tablist">
       ${ONGLETS_GERANT.map(([k, t]) => `<button class="onglet" role="tab" data-onglet-g="${k}" aria-selected="${etat.ongletGerant === k}">${t}</button>`).join("")}
     </div>
@@ -379,7 +380,43 @@ async function vueCompte(cible) {
     cible.querySelectorAll("[data-onglet-g]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
     afficherOngletGerant(boite, c, actualiser);
   }));
-  await Promise.all([afficherOngletGerant(boite, c, actualiser), lettreVance(cible.querySelector("#lettre-vance"), c, actualiser)]);
+  await Promise.all([afficherOngletGerant(boite, c, actualiser), lettreVance(cible.querySelector("#lettre-vance"), c, actualiser),
+    blocIncident(cible.querySelector("#incident"), actualiser)]);
+}
+
+async function blocIncident(boite, actualiser) {
+  const { data: inc } = await sb.rpc("incident_ouvert");
+  if (!inc) { boite.innerHTML = ""; return; }
+  boite.innerHTML = `
+    <article class="feuille incident">
+      <div class="en-tete-lettre"><span class="expediteur">${esc(inc.titre)}</span><span>À régler avant le prochain relevé</span></div>
+      <p>${esc(inc.texte)}</p>
+      <h3>Comment réagissez-vous ?</h3>
+      <div class="choix-incident">
+        ${inc.aides.map((a) => `
+          <button class="bouton-second" data-inc="membre" data-membre="${a.slug}" data-nom="${esc(a.nom)}">
+            Faire appel à ${esc(a.nom)}<br><span class="clause-discrete">${esc(a.atout)}${a.lasse ? ". Vous l'avez sollicité récemment" : ""}</span>
+          </button>`).join("")}
+        <button class="bouton-second" data-inc="jet">Vous en charger vous-même<br><span class="clause-discrete">Gratuit si tout se passe bien, coûteux sinon</span></button>
+        <button class="bouton-second" data-inc="payer">${esc(inc.libelle_payer)}<br><span class="clause-discrete">${dollars(inc.cout_payer)}, c'est réglé</span></button>
+      </div>
+      ${inc.aides.length ? "" : `<p class="clause-discrete">Aucun de vos membres n'a les relations qu'il faudrait pour cette affaire.</p>`}
+      <p class="clause-discrete">Sans réponse au prochain relevé, l'affaire s'aggravera d'elle-même.</p>
+      <p class="erreur" id="erreur-inc"></p>
+    </article>`;
+  boite.onclick = async (ev) => {
+    const b = ev.target.closest("[data-inc]");
+    if (!b) return;
+    const mode = b.dataset.inc;
+    const q = mode === "membre" ? `Demander à ${b.dataset.nom} de s'en occuper ? Il attendra sans doute un geste en retour.`
+      : mode === "jet" ? "Vous en charger vous-même ? Si cela tourne mal, la note sera plus salée." : `Payer ${dollars(inc.cout_payer)} pour régler l'affaire ?`;
+    if (!confirm(q)) return;
+    boite.querySelectorAll("button").forEach((x) => { x.disabled = true; });
+    const { data, error } = await sb.rpc("resoudre_incident", { p_id: inc.id, p_mode: mode, p_membre: b.dataset.membre || null });
+    if (error) { boite.querySelector("#erreur-inc").textContent = messageErreur(error); boite.querySelectorAll("button").forEach((x) => { x.disabled = false; }); return; }
+    alert(data);
+    actualiser();
+  };
 }
 
 // Le texte des lettres de Vance : le MJ peut écrire le sien, sinon une formule selon la situation
@@ -505,7 +542,7 @@ function bilan(lignes) {
     const m = Number(l.montant);
     let cat = l.poste;
     if (cat === "credit") { credit += m; continue; }
-    if (cat === "imprevu" || cat === "divers") cat = m >= 0 ? "plus" : "moins";
+    if (cat === "imprevu" || cat === "divers" || cat === "incident") cat = m >= 0 ? "plus" : "moins";
     t[cat] = (t[cat] || 0) + Math.abs(m);
   }
   const ent = CAT_ENTREES.reduce((s, [k]) => s + (t[k] || 0), 0);
@@ -855,6 +892,8 @@ async function vueMJ() {
         <button class="bouton-second" id="mj-avancer">Avancer d'une semaine (clôturer maintenant)</button>
         <button class="bouton-second" id="mj-pause">${c.en_pause ? "Relancer le calendrier" : "Mettre en pause"}</button>
       </div>
+      <h2>Incidents</h2>
+      <div id="mj-incidents"></div>
       <h2>Victor Vance</h2>
       <div id="mj-vance"></div>
       <h2>Ligne exceptionnelle</h2>
@@ -884,6 +923,7 @@ async function vueMJ() {
   cible.querySelector("#actualiser").addEventListener("click", async () => { await chargerCercle(); vueMJ(); });
   const err = (e) => { cible.querySelector("#erreur").textContent = messageErreur(e); };
   if (c.statut === "actif") pupitreVance(cible.querySelector("#mj-vance"), c, () => vueMJ());
+  if (c.statut === "actif") pupitreIncidents(cible.querySelector("#mj-incidents"), () => vueMJ());
   cible.querySelector("#mj-avancer")?.addEventListener("click", async () => {
     if (!confirm("Clôturer la semaine en cours maintenant ? Le relevé sera calculé et une nouvelle semaine commencera.")) return;
     const { error } = await sb.rpc("mj_avancer_semaine"); if (error) return err(error);
@@ -917,6 +957,8 @@ async function vueMJ() {
         sb.from("cave").delete().gte("quantite", 0),
         sb.from("amenagements_achetes").delete().neq("slug", ""),
         sb.from("demandes_vance").delete().gte("id", 0),
+        sb.from("incidents").delete().gte("id", 0),
+        sb.from("membres").update({ derniere_sollicitation: null }).neq("slug", ""),
       ]);
       await sb.from("journal").delete().gte("id", 0);
     }
@@ -1233,6 +1275,31 @@ document.addEventListener("click", async (ev) => {
   catch { b.textContent = "Copie impossible, sélectionne le texte"; }
   setTimeout(() => { b.textContent = "Copier la description"; }, 1800);
 });
+
+/* ---------- Pupitre des incidents (MJ) ---------- */
+const ISSUE_INCIDENT = { ouvert: "en attente", membre: "réglé par un membre", jet_reussi: "réglé seul (réussi)", jet_rate: "réglé seul (raté)", paye: "réglé en payant", ignore: "ignoré" };
+async function pupitreIncidents(boite, recharger) {
+  const [{ data: cat }, { data: inc }] = await Promise.all([
+    sb.from("incidents_catalogue").select("slug, titre, atouts, accroche_mj").order("titre"),
+    sb.from("incidents").select("*").order("id", { ascending: false }).limit(8),
+  ]);
+  const titre = Object.fromEntries((cat || []).map((x) => [x.slug, x.titre]));
+  boite.innerHTML = `
+    <p class="clause-discrete">À partir de la semaine 3, un incident survient environ une semaine sur trois. Le joueur a jusqu'au relevé suivant pour le régler : faire appel à un membre qui a le bon atout, tenter sa chance ou payer.</p>
+    ${(inc || []).length ? `<ul class="journal">${inc.map((i) => `<li><time>S${i.semaine}</time>${esc(titre[i.slug] || i.slug)}, ${ISSUE_INCIDENT[i.statut]}${i.membre_slug ? ` (${esc(i.membre_slug)})` : ""}</li>`).join("")}</ul>` : `<p class="clause-discrete">Aucun incident pour l'instant.</p>`}
+    ${(inc || []).some((i) => i.statut === "ouvert") ? "" : `
+    <form id="f-incident" class="actions">
+      <select id="i-slug">${(cat || []).map((x) => `<option value="${x.slug}">${esc(x.titre)} (${x.atouts.join(", ")})${x.accroche_mj ? " *" : ""}</option>`).join("")}</select>
+      <button class="bouton-second" type="submit">Déclencher maintenant</button>
+    </form>
+    <p class="clause-discrete">* : incident qui te remonte une accroche de scénario s'il tourne mal.</p>`}`;
+  boite.querySelector("#f-incident")?.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const { error } = await sb.rpc("mj_incident", { p_slug: ev.target["i-slug"].value });
+    if (error) { alert(messageErreur(error)); return; }
+    recharger();
+  });
+}
 
 /* ---------- Pupitre de Vance (MJ) ---------- */
 const PATIENCE = { 3: "cordial", 2: "réservé", 1: "froid (ligne de crédit déjà réduite)", 0: "à bout : il passe en personne" };

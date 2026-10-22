@@ -442,3 +442,10 @@ input[type=file] { font: inherit; font-size: .9rem; margin-bottom: 18px; max-wid
 .lettre-vance .actions { flex-wrap: wrap; }
 .lettre-vance .substitut { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .lettre-vance select { width: auto; margin: 0; }
+
+/* ---------- Incidents ---------- */
+.incident { margin-bottom: 18px; border-left: 4px solid var(--laiton); }
+.incident h3 { font-family: var(--serif-titre); font-weight: 400; font-size: 1.1rem; margin: 14px 0 8px; }
+.choix-incident { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.choix-incident button { text-align: left; line-height: 1.4; }
+#f-incident select { width: auto; max-width: 100%; margin: 0; }
