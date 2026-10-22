@@ -731,7 +731,7 @@ document.addEventListener("click", async (ev) => {
 });
 
 /* ---------- Visuels des soirées (MJ) ---------- */
-const STYLE_VISUEL = ". Moody editorial photograph for an exclusive private tasting club, warm candlelight, dark wood and leather, shallow depth of field, cinematic, muted warm tones, realistic, no text, no logo, no watermark.";
+const STYLE_VISUEL = ". Luxury vintage bar photography, rich dark mahogany wood, warm amber candlelight and brass reflections, shallow depth of field, cinematic, realistic, no people, no readable text on labels, no logo, no watermark.";
 async function vueVisuelsMJ(cible) {
   const { data: themes, error } = await sb.from("themes_soiree").select("*").order("ordre");
   if (error) { cible.innerHTML = `<p class="erreur">${esc(messageErreur(error))}</p>`; return; }
