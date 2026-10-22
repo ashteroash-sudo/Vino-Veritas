@@ -362,11 +362,14 @@ function prochaineCloture(c) {
 }
 
 async function ongletReleve(boite, c) {
-  const [{ data: semaines }, { data: lignes }, journal] = await Promise.all([
+  const [{ data: semaines }, journal] = await Promise.all([
     sb.from("semaines").select("*").not("cloturee_le", "is", null).order("numero", { ascending: false }).limit(8),
-    sb.from("releve").select("*").order("id"),
     chargerJournal(),
   ]);
+  const nums = (semaines || []).map((x) => x.numero);
+  const { data: lignes } = nums.length
+    ? await sb.from("releve").select("*").in("semaine", nums).order("id")
+    : { data: [] };
   const prochain = prochaineCloture(c);
   const parSemaine = {};
   (lignes || []).forEach((l) => (parSemaine[l.semaine] ??= []).push(l));
