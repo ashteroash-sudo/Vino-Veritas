@@ -1036,7 +1036,7 @@ async function vueMJ() {
       <p class="erreur" id="erreur"></p>
     </section>`;
   cible.querySelector("#actualiser").addEventListener("click", async () => { await chargerCercle(); vueMJ(); });
-  const err = (e) => { cible.querySelector("#erreur").textContent = messageErreur(e); };
+  const err = (e) => { cible.querySelector("#erreur").textContent = messageErreur(e); informer(messageErreur(e)); };
   if (c.statut === "actif") pupitreVance(cible.querySelector("#mj-vance"), c, () => vueMJ());
   if (c.statut === "actif") pupitreIncidents(cible.querySelector("#mj-incidents"), () => vueMJ());
   cible.querySelector("#mj-avancer")?.addEventListener("click", async () => {
