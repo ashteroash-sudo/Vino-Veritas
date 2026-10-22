@@ -459,8 +459,9 @@ async function afficherOngletGerant(boite, c, actualiser) {
 
 function prochaineCloture(c) {
   if (!c.date_debut) return null;
-  const d0 = new Date(c.date_debut);
-  return new Date(d0.getTime() + c.semaine_courante * 7 * 864e5);   // à l'heure près en cas de changement d'heure
+  const d = new Date(c.date_debut);
+  d.setDate(d.getDate() + c.semaine_courante * 7);   // en jours calendaires : reste à 19 h malgré le changement d'heure
+  return d;
 }
 
 async function ongletReleve(boite, c) {
