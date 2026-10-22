@@ -307,7 +307,7 @@ async function vueFondation(cible) {
   });
 }
 
-const ONGLETS_GERANT = [["compte", "Compte"], ["membres", "Membres"], ["personnel", "Personnel"], ["vitrine", "Vitrine"], ["fournisseurs", "Fournisseurs"]];
+const ONGLETS_GERANT = [["compte", "Compte"], ["membres", "Membres"], ["personnel", "Personnel"], ["cave", "Cave"], ["vitrine", "Vitrine"]];
 const LIBELLE_POSTE = { hote: "Hôte d'accueil", serveur: "Service en salle", barman: "Bar et sommellerie", portier: "Porte et sécurité" };
 const jourHeure = (d) => new Date(d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) + " à 19 h";
 const portrait = (dossier, slug, nom) =>
@@ -351,11 +351,7 @@ async function vueCompte(cible) {
     else if (etat.ongletGerant === "membres") await ongletMembres(boite, c, actualiser);
     else if (etat.ongletGerant === "personnel") await ongletPersonnel(boite, c, actualiser);
     else if (etat.ongletGerant === "vitrine") await adminVitrine(boite, await chargerCatalogue());
-    else {
-      const catalogue = await chargerCatalogue();
-      boite.innerHTML = `<h2>Nos fournisseurs</h2>${catalogue.map(blocFournisseur).join("")}
-        <p class="clause-discrete">Prix d'achat à la bouteille, hors frais de transport. Les références rares ne sont proposées qu'aux comptes de confiance.</p>`;
-    }
+    else await ongletCave(boite, c, actualiser);
   } catch (e) { boite.innerHTML = `<p class="erreur">${esc(messageErreur(e))}</p>`; }
 }
 
@@ -378,16 +374,106 @@ async function ongletReleve(boite, c) {
     ${c.en_pause ? `<p class="avis">La Maison a suspendu les relevés pour le moment.</p>`
       : c.semaine_courante === 0 ? `<p class="avis">Votre première semaine d'activité commencera le ${jourHeure(c.date_debut)}. Les premières candidatures de membres et de personnel arriveront ce jour-là.</p>`
       : `<p class="avis">Prochain relevé : le ${jourHeure(prochain)}. Le loyer, les salaires et l'alcool des soirées seront débités à ce moment-là.</p>`}
+    ${await blocEngagements(c)}
     <h2>Relevés hebdomadaires</h2>
     ${semaines?.length ? semaines.map((s, i) => `
       <details class="releve-semaine" ${i === 0 ? "open" : ""}>
         <summary><span>Semaine ${s.numero}</span><span class="${Number(s.resume?.resultat) >= 0 ? "positif" : "negatif"}">${Number(s.resume?.resultat) >= 0 ? "+" : ""}${dollars(s.resume?.resultat)}</span></summary>
+        ${bilan(parSemaine[s.numero] || [])}
+        <p class="sous-titre-detail">Détail des opérations</p>
         <table class="table-releve">
           ${(parSemaine[s.numero] || []).map((l) => `<tr><td>${esc(l.libelle)}</td><td class="${Number(l.montant) >= 0 ? "positif" : "negatif"}">${Number(l.montant) > 0 ? "+" : ""}${dollars(l.montant)}</td></tr>`).join("")}
           <tr class="total"><td>Trésorerie après relevé</td><td>${dollars(s.resume?.tresorerie)}</td></tr>
         </table>
       </details>`).join("") : `<p class="clause-discrete">Aucun relevé pour l'instant.</p>`}
     ${journal.filter((j) => j.visible_gerante).length ? `<h2>Correspondance</h2><ul class="journal">${journal.filter((j) => j.visible_gerante).slice(0, 20).map((j) => `<li><time>${dateCourte(j.cree_le)}</time>${esc(j.message)}</li>`).join("")}</ul>` : ""}`;
+}
+
+// Regroupe les lignes du relevé en entrées et sorties
+const CAT_ENTREES = [["cotisations", "Cotisations des membres"], ["bar", "Consommations au bar"], ["soiree", "Soirées"], ["plus", "Bonnes surprises"]];
+const CAT_SORTIES = [["loyer", "Loyer (coût fixe)"], ["salaires", "Personnel"], ["amenagements", "Aménagements et fournitures"], ["achats", "Achats de bouteilles"], ["alcool", "Alcool des soirées"], ["moins", "Imprévus"]];
+function bilan(lignes) {
+  const t = {};
+  let credit = 0;
+  for (const l of lignes) {
+    const m = Number(l.montant);
+    let cat = l.poste;
+    if (cat === "credit") { credit += m; continue; }
+    if (cat === "imprevu" || cat === "divers") cat = m >= 0 ? "plus" : "moins";
+    t[cat] = (t[cat] || 0) + Math.abs(m);
+  }
+  const ent = CAT_ENTREES.reduce((s, [k]) => s + (t[k] || 0), 0);
+  const sor = CAT_SORTIES.reduce((s, [k]) => s + (t[k] || 0), 0);
+  const ligne = ([k, lib]) => `<tr><td>${lib}</td><td>${t[k] ? dollars(t[k]) : "—"}</td></tr>`;
+  return `
+    <div class="bilan">
+      <table class="table-releve"><caption>Entrées</caption>${CAT_ENTREES.map(ligne).join("")}<tr class="total"><td>Total</td><td class="positif">${dollars(ent)}</td></tr></table>
+      <table class="table-releve"><caption>Sorties</caption>${CAT_SORTIES.map(ligne).join("")}<tr class="total"><td>Total</td><td class="negatif">${dollars(sor)}</td></tr></table>
+    </div>
+    <p class="clause-discrete">Résultat de la semaine : <strong class="${ent - sor >= 0 ? "positif" : "negatif"}">${ent - sor >= 0 ? "+" : ""}${dollars(ent - sor)}</strong>${credit ? `. Avance prise sur la ligne de crédit : ${dollars(credit)}` : ""}.</p>`;
+}
+
+async function blocEngagements(c) {
+  if (!c.semaine_courante) return "";
+  const prochain = prochaineCloture(c);
+  const [{ data: achats }, { data: evts }] = await Promise.all([
+    sb.from("achats").select("montant").eq("semaine", c.semaine_courante),
+    sb.from("evenements").select("cout_alcool, date_evt").lt("date_evt", prochain.toISOString()).gte("date_evt", new Date(prochain.getTime() - 7 * 864e5).toISOString()),
+  ]);
+  const fact = (achats || []).reduce((s, a) => s + Number(a.montant), 0);
+  const alc = (evts || []).reduce((s, e) => s + Number(e.cout_alcool), 0);
+  if (!fact && !alc) return "";
+  return `<p class="clause-discrete">Déjà engagé pour ce relevé : ${dollars(fact)} de factures de bouteilles et ${dollars(alc)} d'alcool pour les soirées prévues, en plus du loyer et des salaires.</p>`;
+}
+
+async function ongletCave(boite, c, actualiser) {
+  const [{ data: offres }, { data: cave }, { data: achats }, catalogue] = await Promise.all([
+    sb.from("offres_produits").select("*, produits(*, fournisseurs(nom))").eq("semaine", c.semaine_courante),
+    sb.from("cave").select("quantite, produits(nom, categorie, gamme, prix_achat)").gt("quantite", 0),
+    sb.from("achats").select("produit_id, quantite").eq("semaine", c.semaine_courante),
+    chargerCatalogue(),
+  ]);
+  const deja = {};
+  (achats || []).forEach((a) => { deja[a.produit_id] = (deja[a.produit_id] || 0) + a.quantite; });
+  const total = (cave || []).reduce((s, x) => s + x.quantite, 0);
+  const promo = (o) => o.promo === "remise" ? `<span class="promo">Prix spécial cette semaine</span>`
+    : o.promo === "un_offert" ? `<span class="promo">Une bouteille offerte pour une achetée</span>` : "";
+  boite.innerHTML = `
+    <h2>Allocation de la semaine</h2>
+    ${c.semaine_courante === 0 ? `<p class="clause-discrete">Votre première allocation sera proposée le ${jourHeure(c.date_debut)}.</p>`
+      : (offres || []).length ? `
+      <p class="clause-discrete">Les bouteilles sont livrées tout de suite ; la facture est réglée au relevé du mardi. Le bar entame environ une bouteille pour trois passages : sans cave, il rapporte beaucoup moins.</p>
+      ${offres.map((o) => { const p = o.produits; const reste = o.max_bouteilles - (deja[o.produit_id] || 0); return `
+        <div class="offre">
+          <div>
+            <strong>${esc(p.nom)}</strong>${p.age ? `, ${esc(p.age)}` : ""} ${promo(o)}<br>
+            <span class="clause-discrete">${esc(p.categorie)}, ${esc(p.fournisseurs?.nom)}. ${esc(p.description)}</span>
+          </div>
+          <div class="offre-achat">
+            <span class="prix">${dollars(o.prix)}${Number(o.prix) < Number(p.prix_achat) ? ` <s>${dollars(p.prix_achat)}</s>` : ""}</span>
+            ${reste > 0 ? `<form data-commande="${o.produit_id}" data-nom="${esc(p.nom)}" data-prix="${o.prix}">
+              <input type="number" name="q" min="1" max="${reste}" value="1" aria-label="Nombre de bouteilles">
+              <button class="bouton-second" type="submit">Commander</button>
+            </form><span class="clause-discrete">${reste} disponibles</span>` : `<span class="clause-discrete">Allocation épuisée</span>`}
+          </div>
+        </div>`; }).join("")}`
+      : `<p class="clause-discrete">Aucune allocation cette semaine.</p>`}
+    <p class="erreur" id="erreur-cave" aria-live="polite"></p>
+    <h2>Votre cave (${total} bouteilles)</h2>
+    ${(cave || []).length ? `<table class="table-releve">${cave.sort((a, b) => b.quantite - a.quantite).map((x) => `<tr><td>${esc(x.produits.nom)}<br><span class="clause-discrete">${esc(x.produits.categorie)}${x.produits.gamme === "rare" ? ", pièce rare" : x.produits.gamme === "premium" ? ", haut de gamme" : ""}</span></td><td>${x.quantite}</td></tr>`).join("")}</table>
+      <p class="clause-discrete">Les références haut de gamme et rares en cave rehaussent le prestige du cercle, et les membres dépensent davantage au bar.</p>`
+      : `<p class="clause-discrete">Votre cave est vide.</p>`}
+    <details class="volet"><summary>Catalogue complet de nos fournisseurs</summary>${catalogue.map(blocFournisseur).join("")}</details>`;
+  boite.onsubmit = async (ev) => {
+    const f = ev.target.closest("[data-commande]");
+    if (!f) return;
+    ev.preventDefault();
+    const q = Number(f.q.value);
+    if (!confirm(`Commander ${q} × ${f.dataset.nom} pour ${dollars(q * Number(f.dataset.prix))} ?`)) return;
+    const { error } = await sb.rpc("commander", { p_produit: f.dataset.commande, p_quantite: q });
+    if (error) { boite.querySelector("#erreur-cave").textContent = messageErreur(error); return; }
+    actualiser();
+  };
 }
 
 async function ongletMembres(boite, c, actualiser) {
@@ -400,6 +486,7 @@ async function ongletMembres(boite, c, actualiser) {
       <label for="cotisation">Cotisation mensuelle ($), prélevée le premier mardi du mois</label>
       <div class="actions"><input id="cotisation" type="number" min="0" step="10" value="${Number(c.cotisation_mensuelle)}">
       <button class="bouton-second" type="submit">Modifier</button><span class="statut" aria-live="polite"></span></div>
+      <p class="clause-discrete">Le montant décide de qui frappe à votre porte : trop élevé, les bourses modestes renoncent ; trop modeste, les grandes fortunes jugent le cercle indigne d'elles.</p>
     </form>
     <h2>Candidatures de la semaine</h2>
     ${c.semaine_courante === 0 ? `<p class="clause-discrete">Les premières candidatures arriveront le ${jourHeure(c.date_debut)}.</p>`
@@ -425,6 +512,7 @@ async function ongletMembres(boite, c, actualiser) {
     if (b.dataset.action === "observer") r = await sb.rpc("observer_candidat", { p_slug: slug });
     else if (b.dataset.action === "accepter") r = await sb.rpc("repondre_candidat", { p_slug: slug, p_accepter: true });
     else if (b.dataset.action === "decliner") { if (!confirm(`Décliner la candidature de ${nom} ?`)) return; r = await sb.rpc("repondre_candidat", { p_slug: slug, p_accepter: false }); }
+    else if (b.dataset.action === "exclure") { if (!confirm(`Exclure ${nom} du cercle ? Les autres membres le remarqueront, et il ne reviendra pas.`)) return; r = await sb.rpc("exclure_membre", { p_slug: slug }); }
     else if (b.dataset.action === "nourrir") { if (!confirm(`Vous nourrir sur ${nom} ? Il ne pourra plus venir au cercle pendant deux semaines.`)) return; r = await sb.rpc("se_nourrir", { p_slug: slug }); }
     if (r?.error) { erreur.textContent = messageErreur(r.error); return; }
     if (b.dataset.action === "nourrir") {
@@ -469,6 +557,7 @@ function ficheMembre(m) {
         ${m.indices?.length ? `<ul class="indices">${m.indices.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
         <div class="actions">
           ${m.anemie ? "" : `<button class="bouton-second" data-action="nourrir" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Se nourrir</button>`}
+          <button class="lien-discret" data-action="exclure" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Exclure du cercle</button>
         </div>
       </div>
     </article>`;
@@ -641,6 +730,9 @@ async function vueMJ() {
         sb.from("releve").delete().gte("id", 0),
         sb.from("observations").delete().gte("id", 0),
         sb.from("offres_personnel").delete().gte("semaine", -1),
+        sb.from("offres_produits").delete().gte("semaine", -1),
+        sb.from("achats").delete().gte("id", 0),
+        sb.from("cave").delete().gte("quantite", 0),
       ]);
       await sb.from("journal").delete().gte("id", 0);
     }

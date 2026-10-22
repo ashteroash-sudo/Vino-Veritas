@@ -395,3 +395,19 @@ input[type=file] { font: inherit; font-size: .9rem; margin-bottom: 18px; max-wid
 .indices { font-size: .92rem; font-style: italic; color: var(--encre-pale); padding-left: 18px; margin: 4px 0 8px; }
 .fiche-perso .actions { margin-top: 8px; }
 .coulisses h2 { margin-top: 28px; }
+
+/* ---------- Bilan et cave ---------- */
+.bilan { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 10px; }
+.bilan caption { text-align: left; font-family: var(--serif-titre); font-size: 1.05rem; padding-bottom: 4px; }
+.sous-titre-detail { font-size: .9rem; color: var(--encre-pale); margin: 14px 0 0; }
+.offre { display: grid; grid-template-columns: 1fr auto; gap: 16px; padding: 12px 0; border-bottom: 1px dotted var(--registre-ombre); }
+.offre-achat { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.offre-achat form { display: flex; gap: 6px; align-items: center; }
+.offre-achat input[type=number] { width: 64px; margin: 0; }
+.offre-achat .prix { font-family: var(--serif-titre); font-size: 1.15rem; }
+.promo { display: inline-block; font-size: .8rem; background: var(--sceau); color: var(--registre); padding: 1px 8px; margin-left: 4px; }
+@media (max-width: 600px) {
+  .bilan { grid-template-columns: 1fr; gap: 6px; }
+  .offre { grid-template-columns: 1fr; }
+  .offre-achat { align-items: flex-start; text-align: left; }
+}
