@@ -488,3 +488,6 @@ input[type=file] { font: inherit; font-size: .9rem; margin-bottom: 18px; max-wid
 .budget-rouge { border-color: #b04a50; }
 .budget-rouge .budget-montant { color: #ef8a8f; }
 @media (max-width: 600px) { .budget { padding: 8px 12px; } .budget-montant { font-size: 1.2rem; } }
+.budget-ligne { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 20px; }
+.budget-montant.budget-neg { color: #ef8a8f; }
+.budget-marge { font-size: .88rem; opacity: .85; }

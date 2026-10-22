@@ -742,11 +742,17 @@ function majBudget(projet) {
   const b = etat.budget;
   if (!el || !b) { if (el) el.hidden = true; return; }
   const apres = b.reste - projet;
+  const propre = b.tresorerie - b.engage - projet;   // l'argent du cercle une fois mardi passé
   el.hidden = false;
-  el.className = "budget" + (apres < 0 ? " budget-rouge" : apres < 1000 ? " budget-orange" : "");
+  el.className = "budget" + (apres < 0 ? " budget-rouge" : "");
   el.innerHTML = `
-    <div><span class="budget-montant">${dollars(apres)}</span> <span class="budget-titre">${projet > 0 ? "resteront après cet achat" : "à dépenser d'ici mardi"}</span></div>
-    <div class="budget-detail">Trésorerie ${dollars(b.tresorerie)} + crédit restant ${dollars(b.credit)} − déjà engagé pour mardi ${dollars(b.engage)} (loyer, salaires, bouteilles, soirées${b.engage && Number(etat.cercle?.dette_local) > 0 ? ", M. Vance" : ""})${projet > 0 ? ` − cet achat ${dollars(projet)}` : ""}.${apres < 0 ? " <strong>Au-delà, la Maison ne pourra plus avancer l'argent.</strong>" : ""}</div>`;
+    <div class="budget-ligne">
+      <div><span class="budget-montant ${propre < 0 ? "budget-neg" : ""}">${dollars(propre)}</span> <span class="budget-titre">votre argent après le relevé de mardi${projet > 0 ? ", avec cet achat" : ""}</span></div>
+      <div class="budget-marge">Marge de crédit avant incident de paiement : ${dollars(apres)}</div>
+    </div>
+    <div class="budget-detail">${propre < 0
+      ? `Tout ce que vous dépensez au-delà de votre trésorerie (${dollars(b.tresorerie)}) est emprunté à Calloway &amp; Sons et s'ajoute à votre dette.`
+      : `Trésorerie ${dollars(b.tresorerie)} − déjà engagé pour mardi ${dollars(b.engage)}${projet > 0 ? ` − cet achat ${dollars(projet)}` : ""}.`}${apres < 0 ? " <strong>Cet achat dépasse ce que la Maison peut vous avancer.</strong>" : ""}</div>`;
 }
 
 async function blocEngagements(c) {
@@ -907,7 +913,7 @@ async function ongletAmenagements(boite, c, actualiser) {
     if (!b) return;
     const modele = Number(boite.querySelector(`input[name="m-${b.dataset.acheter}"]:checked`)?.value || 1);
     const apres = etat.budget ? etat.budget.reste - Number(b.dataset.prix) : null;
-    if (!await demander(`Acquérir « ${b.dataset.nom} » (modèle ${modele}) pour ${dollars(b.dataset.prix)} ?${apres != null ? `\n\nIl vous restera ${dollars(apres)} à dépenser d'ici mardi${apres < 0 ? " : c'est plus que la Maison ne peut vous avancer." : "."}` : ""}`)) return;
+    if (!await demander(`Acquérir « ${b.dataset.nom} » (modèle ${modele}) pour ${dollars(b.dataset.prix)} ?${apres != null ? `\n\nMarge de crédit restante après cet achat : ${dollars(apres)}${apres < 0 ? " : c'est plus que la Maison ne peut vous avancer." : ". Ce qui dépasse votre trésorerie est emprunté."}` : ""}`)) return;
     b.disabled = true;
     const { error } = await sb.rpc("acheter_amenagement", { p_slug: b.dataset.acheter, p_modele: modele });
     if (error) { b.disabled = false; boite.querySelector("#erreur-amen").textContent = messageErreur(error); return; }
@@ -1047,7 +1053,7 @@ async function ongletPersonnel(boite, c, actualiser) {
     const e = ev.target.closest("[data-embaucher]"), q = ev.target.closest("[data-congedier]");
     if (!e && !q) return;
     let r;
-    if (e) { const apres = etat.budget ? etat.budget.reste - Number(e.dataset.salaire) : null; if (!await demander(`Embaucher ${e.dataset.nom} pour ${dollars(e.dataset.salaire)} par semaine ?${apres != null ? `\n\nSon premier salaire tombe mardi : il vous restera ${dollars(apres)} à dépenser d'ici là.` : ""}`)) return; r = await sb.rpc("embaucher", { p_slug: e.dataset.embaucher }); }
+    if (e) { const apres = etat.budget ? etat.budget.reste - Number(e.dataset.salaire) : null; if (!await demander(`Embaucher ${e.dataset.nom} pour ${dollars(e.dataset.salaire)} par semaine ?${apres != null ? `\n\nSon premier salaire tombe mardi. Marge de crédit restante ensuite : ${dollars(apres)}.` : ""}`)) return; r = await sb.rpc("embaucher", { p_slug: e.dataset.embaucher }); }
     else { if (!await demander(`Congédier ${q.dataset.nom} ? Il ne reviendra pas.`)) return; r = await sb.rpc("congedier", { p_slug: q.dataset.congedier }); }
     if (r.error) { boite.querySelector("#erreur-perso").textContent = messageErreur(r.error); return; }
     actualiser();
