@@ -546,6 +546,8 @@ Une fois admis, un membre peut vous rendre service grâce à ses relations. Et v
 
 Une agence vous transmet chaque semaine quelques dossiers. Un barman fait tourner le bar, des serveurs permettent d'accueillir du monde aux soirées, un hôte d'accueil fait venir les membres, un portier garde la porte.
 
+Un barman sert une douzaine de membres. Si le cercle grandit au-delà, le bar est débordé et les membres consomment moins : il sera temps d'en embaucher un second. Pas avant.
+
 Chaque employé coûte un salaire chaque semaine. Les plus expérimentés coûtent plus cher, mais rehaussent le cercle. Et chacun voit ce qui se passe au cercle…`,
   cave: `La cave.
 
