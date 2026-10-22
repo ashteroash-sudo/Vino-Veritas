@@ -359,3 +359,22 @@ input[type=file] { font: inherit; font-size: .9rem; margin-bottom: 18px; max-wid
 .grille-photos-admin figure { margin: 0; font-size: .85rem; }
 .grille-photos-admin img { width: 100%; aspect-ratio: 1; object-fit: cover; }
 @media (max-width: 520px) { .deux-col { grid-template-columns: 1fr; gap: 0; } }
+
+/* ---------- Formulaire des soirées ---------- */
+.champ-groupe { border: none; padding: 0; margin: 0 0 18px; }
+.champ-groupe legend { font-size: .95rem; color: var(--encre-pale); margin-bottom: 6px; padding: 0; }
+.choix-annonce {
+  display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; cursor: pointer;
+  padding: 10px 12px; margin-bottom: 8px; border: 1px solid var(--registre-ombre); font-size: .95rem; color: var(--encre);
+}
+.choix-annonce input { margin-top: 5px; accent-color: var(--sceau); }
+.choix-annonce:has(input:checked) { border-color: var(--sceau); background: rgba(123,34,40,.06); }
+#s-perso { margin-top: 8px; }
+.grille-visuels { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.choix-visuel { position: relative; cursor: pointer; display: block; margin: 0; }
+.choix-visuel input { position: absolute; opacity: 0; }
+.choix-visuel img { width: 100%; aspect-ratio: 1; object-fit: cover; border: 3px solid transparent; }
+.choix-visuel:has(input:checked) img { border-color: var(--sceau); }
+.choix-visuel:has(input:focus-visible) { outline: 2px solid var(--laiton); outline-offset: 2px; }
+.choix-texte { display: grid; place-items: center; text-align: center; aspect-ratio: 1; border: 1px dashed var(--encre-pale); font-size: .85rem; color: var(--encre); padding: 6px; }
+.choix-texte:has(input:checked) { border: 2px solid var(--sceau); background: rgba(123,34,40,.06); }

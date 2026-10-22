@@ -362,6 +362,7 @@ async function vueMJ() {
       <button class="onglet" role="tab" data-onglet="coulisses" aria-selected="${etat.ongletMJ === "coulisses"}">Coulisses</button>
       <button class="onglet" role="tab" data-onglet="joueuse" aria-selected="${etat.ongletMJ === "joueuse"}">Vue de la joueuse</button>
       <button class="onglet" role="tab" data-onglet="personnel" aria-selected="${etat.ongletMJ === "personnel"}">Personnel</button>
+      <button class="onglet" role="tab" data-onglet="visuels" aria-selected="${etat.ongletMJ === "visuels"}">Visuels des soirées</button>
     </div>
     <div id="contenu-mj"></div>`;
   app.querySelectorAll(".onglet").forEach((b) => b.addEventListener("click", async () => {
@@ -372,9 +373,11 @@ async function vueMJ() {
   const cible = app.querySelector("#contenu-mj");
   if (etat.ongletMJ === "joueuse") return vueJoueuse(cible);
   if (etat.ongletMJ === "personnel") return vuePersonnelMJ(cible);
+  if (etat.ongletMJ === "visuels") return vueVisuelsMJ(cible);
 
   const c = etat.cercle;
-  const [journal, locaux] = await Promise.all([chargerJournal(), chargerLocaux()]);
+  const [journal, locaux, { data: soirees }] = await Promise.all([chargerJournal(), chargerLocaux(),
+    sb.from("evenements").select("titre, date_evt, prix_participation, cout_alcool, texte_libre, theme").order("date_evt", { ascending: false }).limit(12)]);
   const local = locaux.find((l) => l.id === c.local_id);
   const statuts = { invitation: "Carte remise, contrat pas encore signé", contrat_signe: "Contrat signé, cercle pas encore fondé", actif: "Cercle fondé" };
   cible.innerHTML = `
@@ -391,6 +394,8 @@ async function vueMJ() {
         <dt>Ligne de crédit</dt><dd>${dollars(c.ligne_credit)} (utilisé : ${dollars(c.credit_utilise)})</dd>
         <dt>Trésorerie</dt><dd>${dollars(c.tresorerie)}</dd>
       </dl>
+      <h2>Soirées annoncées</h2>
+      ${soirees?.length ? `<ul class="journal">${soirees.map((e) => `<li><time>${dateCourte(e.date_evt)}</time>${esc(e.titre)}, participation ${dollars(e.prix_participation)}, alcool ${dollars(e.cout_alcool)}${e.texte_libre ? ` <span class="secret">(composée par le joueur : bonus possible)</span>` : ""}</li>`).join("")}</ul>` : `<p class="clause-discrete">Aucune soirée annoncée.</p>`}
       <h2>Journal complet</h2>
       ${journal.length ? `<ul class="journal">${journal.map((j) => `<li><time>${dateCourte(j.cree_le)}</time>${esc(j.message)}${j.visible_gerante ? "" : ` <span class="badge-mj">(MJ seulement)</span>`}</li>`).join("")}</ul>` : `<p class="clause-discrete">Rien pour l'instant : la joueuse n'a pas encore agi.</p>`}
       <div class="actions" style="margin-top:24px">
@@ -438,14 +443,18 @@ async function envoyerImage(fichier) {
 
 async function adminVitrine(boite, catalogue) {
   const c = etat.cercle;
-  const [{ data: evts }, { data: mises }, { data: photos }] = await Promise.all([
+  const [{ data: evts }, { data: mises }, { data: photos }, { data: themes }] = await Promise.all([
     sb.from("evenements").select("*").order("date_evt"),
     sb.from("vitrine_produits").select("*").order("ordre"),
     sb.from("vitrine_photos").select("*").order("ordre").order("cree_le"),
+    sb.from("themes_soiree").select("*").order("ordre"),
   ]);
+  const themeParSlug = Object.fromEntries(themes.map((t) => [t.slug, t]));
   const produits = catalogue.flatMap((f) => f.produits.map((p) => ({ ...p, fournisseur: f.nom })));
   const parId = Object.fromEntries(produits.map((p) => [p.id, p]));
   const dejaMis = new Set(mises.map((m) => m.produit_id));
+  etat.volets ??= {};
+  const ouvert = (cle, defaut) => ((etat.volets[cle] ?? defaut) ? "open" : "");
 
   boite.innerHTML = `
     <div class="en-tete-lettre">
@@ -454,7 +463,7 @@ async function adminVitrine(boite, catalogue) {
     </div>
     <p class="clause-discrete">Ce que vous publiez ici est visible par toute personne qui connaît l'adresse de votre vitrine.</p>
 
-    <details class="volet" open>
+    <details class="volet" data-volet="presentation" ${ouvert("presentation", !c.presentation)}>
       <summary>Présentation</summary>
       <form id="f-textes">
         <label for="accroche">Phrase d'accueil</label>
@@ -465,31 +474,27 @@ async function adminVitrine(boite, catalogue) {
       </form>
     </details>
 
-    <details class="volet" ${evts.length ? "" : "open"}>
+    <details class="volet" data-volet="soirees" ${ouvert("soirees", !evts.length)}>
       <summary>Soirées (${evts.length})</summary>
       <ul class="liste-admin">${evts.map((e) => `
         <li>
           ${e.image ? `<img src="${esc(urlImage(e.image))}" alt="">` : `<span class="vignette-vide"></span>`}
-          <div><strong>${esc(e.titre)}</strong><br><span class="clause-discrete">${dateCourte(e.date_evt)}, ${Number(e.prix_participation) > 0 ? dollars(e.prix_participation) : "gratuit pour les membres"}</span></div>
+          <div><strong>${esc(e.titre)}</strong><br><span class="clause-discrete">${dateCourte(e.date_evt)}, participation ${Number(e.prix_participation) > 0 ? dollars(e.prix_participation) : "offerte"}, alcool ${dollars(e.cout_alcool)}</span></div>
           <button type="button" class="lien-discret" data-retirer-evt="${e.id}">Retirer</button>
         </li>`).join("") || `<li class="clause-discrete">Aucune soirée annoncée.</li>`}</ul>
       <form id="f-soiree" class="sous-form">
         <h3>Annoncer une soirée</h3>
-        <label for="s-titre">Titre</label>
-        <input id="s-titre" type="text" maxlength="100" required placeholder="Ex. : Les cognacs de l'après-guerre">
-        <div class="deux-col">
-          <div><label for="s-date">Date et heure</label><input id="s-date" type="datetime-local" required></div>
-          <div><label for="s-prix">Participation ($)</label><input id="s-prix" type="number" min="0" step="5" value="0"></div>
-        </div>
-        <label for="s-desc">Description</label>
-        <textarea id="s-desc" maxlength="800" rows="3" placeholder="Ce qui sera servi, l'ambiance, la tenue attendue…"></textarea>
-        <label for="s-image">Affiche ou visuel (facultatif)</label>
-        <input id="s-image" type="file" accept="image/*">
-        <div class="actions"><button class="bouton" type="submit">Publier la soirée</button><span class="statut" aria-live="polite"></span></div>
+        <label for="s-theme">Thème</label>
+        <select id="s-theme" required>
+          <option value="">Choisir un thème</option>
+          ${themes.map((t) => `<option value="${t.slug}">${esc(t.nom)}</option>`).join("")}
+          <option value="libre">Thème libre</option>
+        </select>
+        <div id="s-suite"></div>
       </form>
     </details>
 
-    <details class="volet">
+    <details class="volet" data-volet="produits" ${ouvert("produits", false)}>
       <summary>Bouteilles mises en avant (${mises.length})</summary>
       <ul class="liste-admin">${mises.map((m) => { const p = parId[m.produit_id]; return p ? `
         <li>
@@ -509,7 +514,7 @@ async function adminVitrine(boite, catalogue) {
       </form>
     </details>
 
-    <details class="volet">
+    <details class="volet" data-volet="photos" ${ouvert("photos", false)}>
       <summary>Photos du salon (${photos.length})</summary>
       <div class="grille-photos-admin">${photos.map((p) => `
         <figure>
@@ -525,6 +530,8 @@ async function adminVitrine(boite, catalogue) {
       </form>
     </details>`;
 
+  boite.querySelectorAll("details[data-volet]").forEach((d) =>
+    d.addEventListener("toggle", () => { etat.volets[d.dataset.volet] = d.open; }));
   const recharger = () => adminVitrine(boite, catalogue);
   const occupe = (form, msg) => { form.querySelector("button[type=submit]").disabled = !!msg; form.querySelector(".statut").textContent = msg || ""; };
   const echec = (form, e) => { form.querySelector("button[type=submit]").disabled = false; form.querySelector(".statut").textContent = messageErreur(e); };
@@ -537,13 +544,101 @@ async function adminVitrine(boite, catalogue) {
     occupe(f, ""); f.querySelector(".statut").textContent = "Enregistré.";
   });
 
-  boite.querySelector("#f-soiree").addEventListener("submit", async (ev) => {
-    ev.preventDefault(); const f = ev.target; occupe(f, "Publication…");
+  const fSoiree = boite.querySelector("#f-soiree");
+  const suite = fSoiree.querySelector("#s-suite");
+  const vignettes = (images, nom) => images.map((src, i) => `
+    <label class="choix-visuel"><input type="radio" name="s-visuel" value="${esc(src)}" ${i === 0 ? "checked" : ""}>
+      <img src="${esc(src)}" alt="Visuel ${i + 1}" onerror="this.closest('label').remove()"></label>`).join("");
+  const blocVisuel = (images) => `
+    <fieldset class="champ-groupe">
+      <legend>Visuel</legend>
+      <div class="grille-visuels">
+        ${vignettes(images)}
+        <label class="choix-visuel choix-texte"><input type="radio" name="s-visuel" value="perso"> <span>Envoyer ma propre image</span></label>
+        <label class="choix-visuel choix-texte"><input type="radio" name="s-visuel" value="" ${images.length ? "" : "checked"}> <span>Sans visuel</span></label>
+      </div>
+      <input id="s-image" type="file" accept="image/*" hidden>
+    </fieldset>`;
+  const blocDatePrix = `
+    <div class="deux-col">
+      <div><label for="s-date">Date et heure</label><input id="s-date" type="datetime-local" required></div>
+      <div><label for="s-prix">Participation demandée ($)</label><input id="s-prix" type="number" min="0" step="5" value="0"></div>
+    </div>`;
+
+  fSoiree.querySelector("#s-theme").addEventListener("change", (ev) => {
+    const slug = ev.target.value;
+    if (!slug) { suite.innerHTML = ""; return; }
+    if (slug === "libre") {
+      suite.innerHTML = `
+        <p class="avis">Une soirée entièrement à votre façon : titre, description et visuel sont libres.</p>
+        <label for="s-base">Alcool principal servi (fixe le coût de la soirée)</label>
+        <select id="s-base" required>${themes.map((t) => `<option value="${t.slug}">${esc(t.nom)} (${dollars(t.cout_alcool)})</option>`).join("")}</select>
+        <label for="s-titre">Titre de la soirée</label>
+        <input id="s-titre" type="text" maxlength="100" required placeholder="Ex. : Bal masqué d'Halloween">
+        <label for="s-desc">Description</label>
+        <textarea id="s-desc" maxlength="800" rows="4" required></textarea>
+        ${blocVisuel(themes.flatMap((t) => t.images))}
+        ${blocDatePrix}
+        <div class="actions"><button class="bouton" type="submit">Publier la soirée</button><span class="statut" aria-live="polite"></span></div>`;
+    } else {
+      const t = themeParSlug[slug];
+      suite.innerHTML = `
+        <p class="avis">Coût en alcool de cette soirée : <strong>${dollars(t.cout_alcool)}</strong>, prélevé au relevé du mardi.</p>
+        <fieldset class="champ-groupe">
+          <legend>Annonce</legend>
+          ${t.annonces.map((a, i) => `
+            <label class="choix-annonce"><input type="radio" name="s-annonce" value="${i}" ${i === 0 ? "checked" : ""}>
+              <span><strong>${esc(a.titre)}</strong><br>${esc(a.description)}</span></label>`).join("")}
+          <label class="choix-annonce"><input type="radio" name="s-annonce" value="perso"><span><strong>J'écris ma propre annonce</strong></span></label>
+          <div id="s-perso" hidden>
+            <label for="s-titre">Titre</label><input id="s-titre" type="text" maxlength="100">
+            <label for="s-desc">Description</label><textarea id="s-desc" maxlength="800" rows="4"></textarea>
+          </div>
+        </fieldset>
+        ${blocVisuel(t.images)}
+        ${blocDatePrix}
+        <div class="actions"><button class="bouton" type="submit">Publier la soirée</button><span class="statut" aria-live="polite"></span></div>`;
+    }
+  });
+
+  fSoiree.addEventListener("change", (ev) => {
+    if (ev.target.name === "s-annonce") {
+      const perso = ev.target.value === "perso";
+      const bloc = suite.querySelector("#s-perso");
+      bloc.hidden = !perso;
+      bloc.querySelectorAll("input,textarea").forEach((el) => { el.required = perso; });
+    }
+    if (ev.target.name === "s-visuel") {
+      const f = suite.querySelector("#s-image");
+      f.hidden = ev.target.value !== "perso";
+      f.required = ev.target.value === "perso";
+    }
+  });
+
+  fSoiree.addEventListener("submit", async (ev) => {
+    ev.preventDefault(); const f = fSoiree; occupe(f, "Publication…");
     try {
-      const image = f["s-image"].files[0] ? await envoyerImage(f["s-image"].files[0]) : null;
+      const slug = f.querySelector("#s-theme").value;
+      const libre = slug === "libre";
+      const t = themeParSlug[libre ? f.querySelector("#s-base").value : slug];
+      let titre, description, texteLibre = libre;
+      const choixAnnonce = f.querySelector("input[name=s-annonce]:checked");
+      if (libre || choixAnnonce?.value === "perso") {
+        titre = f.querySelector("#s-titre").value.trim();
+        description = f.querySelector("#s-desc").value.trim();
+        texteLibre = true;
+      } else {
+        ({ titre, description } = t.annonces[Number(choixAnnonce.value)]);
+      }
+      const visuel = f.querySelector("input[name=s-visuel]:checked")?.value || "";
+      const image = visuel === "perso" ? await envoyerImage(f.querySelector("#s-image").files[0]) : (visuel || null);
       const { error } = await sb.from("evenements").insert({
-        titre: f["s-titre"].value.trim(), date_evt: new Date(f["s-date"].value).toISOString(),
-        prix_participation: Number(f["s-prix"].value) || 0, description: f["s-desc"].value.trim() || null, image,
+        titre, description, image,
+        theme: libre ? null : t.slug,
+        cout_alcool: t.cout_alcool,
+        texte_libre: texteLibre || visuel === "perso",
+        date_evt: new Date(f.querySelector("#s-date").value).toISOString(),
+        prix_participation: Number(f.querySelector("#s-prix").value) || 0,
       });
       if (error) throw error;
       recharger();
@@ -634,6 +729,30 @@ document.addEventListener("click", async (ev) => {
   catch { b.textContent = "Copie impossible, sélectionne le texte"; }
   setTimeout(() => { b.textContent = "Copier la description"; }, 1800);
 });
+
+/* ---------- Visuels des soirées (MJ) ---------- */
+const STYLE_VISUEL = ". Moody editorial photograph for an exclusive private tasting club, warm candlelight, dark wood and leather, shallow depth of field, cinematic, muted warm tones, realistic, no text, no logo, no watermark.";
+async function vueVisuelsMJ(cible) {
+  const { data: themes, error } = await sb.from("themes_soiree").select("*").order("ordre");
+  if (error) { cible.innerHTML = `<p class="erreur">${esc(messageErreur(error))}</p>`; return; }
+  cible.innerHTML = `
+    <section class="feuille">
+      <h1>Visuels des soirées</h1>
+      <p class="badge-mj">Visible uniquement par le MJ.</p>
+      <p class="clause-discrete">Trois visuels par thème. Copie la description dans ton générateur, puis envoie-moi les images avec le nom de fichier indiqué. Format carré ou paysage.</p>
+      ${themes.map((t) => `
+        <h2 class="poste-titre">${esc(t.nom)}</h2>
+        ${t.prompts.map((p, i) => `
+          <article class="fiche-perso">
+            <div class="portrait"><img src="${esc(t.images[i])}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'portrait-vide',textContent:'Visuel à venir'}))"></div>
+            <div class="fiche-texte">
+              <h3>Fichier ${esc(t.slug)}-${i + 1}.jpg</h3>
+              <p class="prompt-texte">${esc(p + STYLE_VISUEL)}</p>
+              <button type="button" class="bouton-second copier" data-copier="${esc(p + STYLE_VISUEL)}">Copier la description</button>
+            </div>
+          </article>`).join("")}`).join("")}
+    </section>`;
+}
 
 /* ---------- Galerie photo des annonces ---------- */
 const visionneuse = document.getElementById("visionneuse");
