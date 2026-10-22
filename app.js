@@ -2,8 +2,33 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
 
 // Pas de verrou inter-onglets sur la session : avec plusieurs onglets ouverts, il bloquait les requêtes pendant de longues secondes.
+// Certaines requêtes restent parfois bloquées en route (jusqu'à une minute et plus).
+// Les lectures sont abandonnées au bout de 8 s et relancées ; les actions qui modifient ne sont jamais rejouées.
+const LECTURES_RPC = ["mon_role", "etat_cercle", "faire_avancer", "mes_membres", "est_mj", "est_joueur"];
+async function fetchAvecRelance(url, options = {}) {
+  const methode = (options.method || "GET").toUpperCase();
+  const chemin = String(url);
+  const relancable = methode === "GET" || methode === "HEAD" || LECTURES_RPC.some((r) => chemin.includes(`/rpc/${r}`));
+  const essais = relancable ? 4 : 1;
+  const delai = relancable ? 8000 : 45000;
+  let derniere;
+  for (let i = 0; i < essais; i++) {
+    const ctrl = new AbortController();
+    const minuteur = setTimeout(() => ctrl.abort(), delai);
+    try {
+      return await fetch(url, { ...options, signal: ctrl.signal });
+    } catch (e) {
+      derniere = e;
+      if (e.name !== "AbortError") throw e;
+    } finally {
+      clearTimeout(minuteur);
+    }
+  }
+  throw new Error("La Maison ne répond pas pour le moment. Réessayez dans un instant.", { cause: derniere });
+}
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { lock: async (_nom, _delai, fn) => await fn() },
+  global: { fetch: fetchAvecRelance },
 });
 const app = document.getElementById("app");
 const btnDeco = document.getElementById("deconnexion");
