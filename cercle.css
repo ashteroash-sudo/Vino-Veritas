@@ -155,3 +155,10 @@ button:focus-visible { outline: 2px solid var(--or); outline-offset: 3px; }
   .soiree .jour { font-size: 2.5rem; }
   .salon-grille { grid-template-columns: repeat(2, 1fr); }
 }
+.musique-flottante {
+  position: fixed; right: 16px; bottom: 16px; z-index: 5;
+  background: rgba(36,16,21,.85); color: var(--fumee); border: 1px solid var(--filet);
+  font: inherit; font-size: .85rem; padding: 6px 14px; cursor: pointer; backdrop-filter: blur(4px);
+}
+.musique-flottante[aria-pressed=true] { color: var(--or); border-color: var(--or); }
+.musique-flottante:focus-visible { outline: 2px solid var(--or); outline-offset: 2px; }

@@ -1,5 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
+import { installerMusique } from "./musique.js";
+installerMusique("audio/calloway.mp3", document.querySelector(".pied"));
 
 // Pas de verrou inter-onglets sur la session : avec plusieurs onglets ouverts, il bloquait les requêtes pendant de longues secondes.
 // Certaines requêtes restent parfois bloquées en route (jusqu'à une minute et plus).

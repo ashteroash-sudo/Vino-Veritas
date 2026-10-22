@@ -1,5 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
+import { installerMusique } from "./musique.js";
+installerMusique("audio/cercle.mp3", document.body, { flottant: true });
 
 // Page publique : aucune session, lecture via la fonction vitrine() uniquement.
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
