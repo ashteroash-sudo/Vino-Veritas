@@ -625,6 +625,9 @@ async function ongletReleve(boite, c, actualiser) {
   const prochain = prochaineCloture(c);
   const parSemaine = {};
   (lignes || []).forEach((l) => (parSemaine[l.semaine] ??= []).push(l));
+  boite.onclick = (ev) => {
+    if (ev.target.id === "remb-max") { const i = boite.querySelector("#remb"); i.value = i.max; }
+  };
   boite.onsubmit = async (ev) => {
     if (ev.target.id === "f-vance") {
       ev.preventDefault();
@@ -639,7 +642,7 @@ async function ongletReleve(boite, c, actualiser) {
     ev.preventDefault();
     const m = Number(ev.target.remb.value);
     if (!(m > 0)) return;
-    if (!await demander(`Rembourser ${dollars(m)} à Calloway & Sons ?`)) return;
+    if (!await demander(`Rendre ${dollars(m)} à Calloway & Sons, pris sur votre trésorerie ?`)) return;
     const { error } = await sb.rpc("rembourser_credit", { p_montant: m });
     if (error) { ev.target.querySelector(".statut").textContent = messageErreur(error); return; }
     actualiser();
@@ -650,13 +653,15 @@ async function ongletReleve(boite, c, actualiser) {
       : `<p class="avis">Prochain relevé : le ${jourHeure(prochain)}. Le loyer, les salaires et l'alcool des soirées seront débités à ce moment-là.</p>`}
     ${await blocEngagements(c)}
     ${await blocDetteVance(c)}
-    ${Number(c.credit_utilise) > 0 ? `
+    ${Number(c.credit_utilise) > 0 ? (Number(c.tresorerie) > 0 ? `
     <form id="f-rembourser" class="ligne-cotisation">
-      <label for="remb">Rembourser Calloway & Sons (vous devez ${dollars(c.credit_utilise)})</label>
-      <div class="actions"><input id="remb" type="number" min="0" step="100" max="${Math.max(0, Math.min(Number(c.tresorerie), Number(c.credit_utilise)))}" value="0">
-      <button class="bouton-second" type="submit">Rembourser</button><span class="statut" aria-live="polite"></span></div>
-      <p class="clause-discrete">Rembourser libère à nouveau du crédit pour les mauvaises semaines. Une dette qui dure finit par inquiéter la Maison, et votre garant.</p>
-    </form>` : ""}
+      <label for="remb">Rendre de l'argent à Calloway &amp; Sons</label>
+      <p class="clause-discrete">Vous leur devez ${dollars(c.credit_utilise)}. Vous pouvez en rendre une partie dès maintenant, prise sur votre trésorerie (${dollars(c.tresorerie)}). Ce que vous rendez allège votre dette et vous redonne de la marge pour les mauvaises semaines.</p>
+      <div class="actions"><input id="remb" type="number" min="0" step="100" max="${Math.max(0, Math.min(Number(c.tresorerie), Number(c.credit_utilise)))}" value="0" aria-label="Montant à rendre"> <span>$</span>
+      <button class="bouton-second" type="button" id="remb-max">Tout ce que je peux (${dollars(Math.min(Number(c.tresorerie), Number(c.credit_utilise)))})</button>
+      <button class="bouton-second" type="submit">Rendre</button><span class="statut" aria-live="polite"></span></div>
+    </form>` : `
+    <p class="clause-discrete">Vous devez ${dollars(c.credit_utilise)} à Calloway &amp; Sons. Vous pourrez commencer à les rembourser quand votre trésorerie sera positive, c'est-à-dire quand une semaine rapportera plus qu'elle ne coûte. Une dette qui dure finit par inquiéter la Maison, et votre garant.</p>`) : ""}
     <h2>Relevés hebdomadaires</h2>
     ${semaines?.length ? semaines.map((s, i) => `
       <details class="releve-semaine" ${i === 0 ? "open" : ""}>
