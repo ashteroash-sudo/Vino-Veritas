@@ -307,37 +307,214 @@ async function vueFondation(cible) {
   });
 }
 
+const ONGLETS_GERANT = [["compte", "Compte"], ["membres", "Membres"], ["personnel", "Personnel"], ["vitrine", "Vitrine"], ["fournisseurs", "Fournisseurs"]];
+const LIBELLE_POSTE = { hote: "Hôte d'accueil", serveur: "Service en salle", barman: "Bar et sommellerie", portier: "Porte et sécurité" };
+const jourHeure = (d) => new Date(d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) + " à 19 h";
+const portrait = (dossier, slug, nom) =>
+  `<img src="img/${dossier}/${esc(slug)}.jpg" alt="Portrait de ${esc(nom)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'portrait-vide',textContent:'Pas de photographie'}))">`;
+
 async function vueCompte(cible) {
-  const c = etat.cercle;
   cible.innerHTML = `<p class="chargement">Ouverture du compte…</p>`;
-  const [catalogue, journal, locaux] = await Promise.all([chargerCatalogue(), chargerJournal(), chargerLocaux()]);
+  await sb.rpc("faire_avancer");             // fait passer les mardis écoulés
+  await chargerCercle();
+  const c = etat.cercle;
+  const locaux = await chargerLocaux();
   const local = locaux.find((l) => l.id === c.local_id);
   const disponible = Number(c.ligne_credit) - Number(c.credit_utilise);
-  const journalPublic = journal.filter((j) => j.visible_gerante);
+  etat.ongletGerant ??= "compte";
   cible.innerHTML = `
-    <section class="feuille">
+    <section class="feuille entete-compte">
       <div class="en-tete-lettre">
         <span class="expediteur">${esc(c.nom)}</span>
-        <span>Compte ouvert le ${dateLongue(c.fonde_le)}</span>
+        <span>${c.semaine_courante > 0 ? `Semaine ${c.semaine_courante}` : `Compte ouvert le ${dateLongue(c.fonde_le)}`}</span>
       </div>
       ${c.devise ? `<p><em>${esc(c.devise)}</em></p>` : ""}
       ${local ? `<p class="adresse-cercle">${esc(local.titre)}, ${esc(local.adresse)}</p>` : ""}
       <div class="solde">
-        <div><span class="valeur">${dollars(disponible)}</span><span class="intitule">Crédit disponible chez la Maison</span></div>
         <div><span class="valeur">${dollars(c.tresorerie)}</span><span class="intitule">Trésorerie du cercle</span></div>
+        <div><span class="valeur">${dollars(disponible)}</span><span class="intitule">Crédit encore disponible</span></div>
         ${local ? `<div><span class="valeur">${dollars(local.loyer_hebdo)}</span><span class="intitule">Loyer hebdomadaire</span></div>` : ""}
-        <div><span class="valeur">0</span><span class="intitule">Bouteilles en cave</span></div>
       </div>
-      <p class="avis">Votre première allocation sera proposée le ${prochainMardi19h().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à 19 h. D'ici là, vous pouvez consulter les références de nos fournisseurs.</p>
-      ${journalPublic.length ? `<h2>Correspondance</h2><ul class="journal">${journalPublic.map((j) => `<li><time>${dateCourte(j.cree_le)}</time>${esc(j.message)}</li>`).join("")}</ul>` : ""}
     </section>
-    <section class="feuille" id="vitrine-admin"></section>
-    <section class="feuille">
-      <h2>Nos fournisseurs</h2>
-      ${catalogue.map(blocFournisseur).join("")}
-      <p class="clause-discrete">Prix d'achat à la bouteille, hors frais de transport. Les références rares ne sont proposées qu'aux comptes de confiance.</p>
-    </section>`;
-  adminVitrine(cible.querySelector("#vitrine-admin"), catalogue);
+    <div class="onglets onglets-gerant" role="tablist">
+      ${ONGLETS_GERANT.map(([k, t]) => `<button class="onglet" role="tab" data-onglet-g="${k}" aria-selected="${etat.ongletGerant === k}">${t}</button>`).join("")}
+    </div>
+    <section class="feuille" id="contenu-gerant"></section>`;
+  cible.querySelectorAll("[data-onglet-g]").forEach((b) => b.addEventListener("click", () => {
+    etat.ongletGerant = b.dataset.ongletG;
+    vueCompte(cible);
+  }));
+  const boite = cible.querySelector("#contenu-gerant");
+  const actualiser = () => vueCompte(cible);
+  try {
+    if (etat.ongletGerant === "compte") await ongletReleve(boite, c);
+    else if (etat.ongletGerant === "membres") await ongletMembres(boite, c, actualiser);
+    else if (etat.ongletGerant === "personnel") await ongletPersonnel(boite, c, actualiser);
+    else if (etat.ongletGerant === "vitrine") await adminVitrine(boite, await chargerCatalogue());
+    else {
+      const catalogue = await chargerCatalogue();
+      boite.innerHTML = `<h2>Nos fournisseurs</h2>${catalogue.map(blocFournisseur).join("")}
+        <p class="clause-discrete">Prix d'achat à la bouteille, hors frais de transport. Les références rares ne sont proposées qu'aux comptes de confiance.</p>`;
+    }
+  } catch (e) { boite.innerHTML = `<p class="erreur">${esc(messageErreur(e))}</p>`; }
+}
+
+function prochaineCloture(c) {
+  if (!c.date_debut) return null;
+  const d0 = new Date(c.date_debut);
+  return new Date(d0.getTime() + c.semaine_courante * 7 * 864e5);   // à l'heure près en cas de changement d'heure
+}
+
+async function ongletReleve(boite, c) {
+  const [{ data: semaines }, { data: lignes }, journal] = await Promise.all([
+    sb.from("semaines").select("*").not("cloturee_le", "is", null).order("numero", { ascending: false }).limit(8),
+    sb.from("releve").select("*").order("id"),
+    chargerJournal(),
+  ]);
+  const prochain = prochaineCloture(c);
+  const parSemaine = {};
+  (lignes || []).forEach((l) => (parSemaine[l.semaine] ??= []).push(l));
+  boite.innerHTML = `
+    ${c.en_pause ? `<p class="avis">La Maison a suspendu les relevés pour le moment.</p>`
+      : c.semaine_courante === 0 ? `<p class="avis">Votre première semaine d'activité commencera le ${jourHeure(c.date_debut)}. Les premières candidatures de membres et de personnel arriveront ce jour-là.</p>`
+      : `<p class="avis">Prochain relevé : le ${jourHeure(prochain)}. Le loyer, les salaires et l'alcool des soirées seront débités à ce moment-là.</p>`}
+    <h2>Relevés hebdomadaires</h2>
+    ${semaines?.length ? semaines.map((s, i) => `
+      <details class="releve-semaine" ${i === 0 ? "open" : ""}>
+        <summary><span>Semaine ${s.numero}</span><span class="${Number(s.resume?.resultat) >= 0 ? "positif" : "negatif"}">${Number(s.resume?.resultat) >= 0 ? "+" : ""}${dollars(s.resume?.resultat)}</span></summary>
+        <table class="table-releve">
+          ${(parSemaine[s.numero] || []).map((l) => `<tr><td>${esc(l.libelle)}</td><td class="${Number(l.montant) >= 0 ? "positif" : "negatif"}">${Number(l.montant) > 0 ? "+" : ""}${dollars(l.montant)}</td></tr>`).join("")}
+          <tr class="total"><td>Trésorerie après relevé</td><td>${dollars(s.resume?.tresorerie)}</td></tr>
+        </table>
+      </details>`).join("") : `<p class="clause-discrete">Aucun relevé pour l'instant.</p>`}
+    ${journal.filter((j) => j.visible_gerante).length ? `<h2>Correspondance</h2><ul class="journal">${journal.filter((j) => j.visible_gerante).slice(0, 20).map((j) => `<li><time>${dateCourte(j.cree_le)}</time>${esc(j.message)}</li>`).join("")}</ul>` : ""}`;
+}
+
+async function ongletMembres(boite, c, actualiser) {
+  const { data: liste, error } = await sb.rpc("mes_membres");
+  if (error) throw error;
+  const candidats = liste.filter((m) => m.statut === "candidat");
+  const membres = liste.filter((m) => m.statut === "membre");
+  boite.innerHTML = `
+    <form id="f-cotisation" class="ligne-cotisation">
+      <label for="cotisation">Cotisation mensuelle ($), prélevée le premier mardi du mois</label>
+      <div class="actions"><input id="cotisation" type="number" min="0" step="10" value="${Number(c.cotisation_mensuelle)}">
+      <button class="bouton-second" type="submit">Modifier</button><span class="statut" aria-live="polite"></span></div>
+    </form>
+    <h2>Candidatures de la semaine</h2>
+    ${c.semaine_courante === 0 ? `<p class="clause-discrete">Les premières candidatures arriveront le ${jourHeure(c.date_debut)}.</p>`
+      : candidats.length ? candidats.map((m) => ficheCandidat(m)).join("")
+      : `<p class="clause-discrete">Aucune candidature en attente. De nouveaux noms vous seront proposés au prochain relevé.</p>`}
+    <p class="clause-discrete">Vous pouvez prendre des renseignements deux fois par semaine. Une candidature sans réponse au relevé suivant est retirée.</p>
+    <h2>Membres du cercle (${membres.length})</h2>
+    ${membres.length ? membres.map((m) => ficheMembre(m)).join("") : `<p class="clause-discrete">Le cercle n'a pas encore de membres.</p>`}
+    <p class="erreur" id="erreur-membres" aria-live="polite"></p>`;
+
+  const erreur = boite.querySelector("#erreur-membres");
+  boite.querySelector("#f-cotisation").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const { error } = await sb.rpc("maj_cotisation", { p_montant: Number(ev.target.cotisation.value) });
+    ev.target.querySelector(".statut").textContent = error ? messageErreur(error) : "Enregistré.";
+  });
+  boite.onclick = async (ev) => {
+    const b = ev.target.closest("[data-action]");
+    if (!b) return;
+    const slug = b.dataset.slug, nom = b.dataset.nom;
+    erreur.textContent = "";
+    let r;
+    if (b.dataset.action === "observer") r = await sb.rpc("observer_candidat", { p_slug: slug });
+    else if (b.dataset.action === "accepter") r = await sb.rpc("repondre_candidat", { p_slug: slug, p_accepter: true });
+    else if (b.dataset.action === "decliner") { if (!confirm(`Décliner la candidature de ${nom} ?`)) return; r = await sb.rpc("repondre_candidat", { p_slug: slug, p_accepter: false }); }
+    else if (b.dataset.action === "nourrir") { if (!confirm(`Vous nourrir sur ${nom} ? Il ne pourra plus venir au cercle pendant deux semaines.`)) return; r = await sb.rpc("se_nourrir", { p_slug: slug }); }
+    if (r?.error) { erreur.textContent = messageErreur(r.error); return; }
+    if (b.dataset.action === "nourrir") {
+      const { data: apres } = await sb.rpc("mes_membres");
+      const lui = apres?.find((x) => x.slug === slug);
+      alert(lui?.anemie
+        ? `Vous vous êtes nourri sur ${nom}. Il se sentira faible et ne viendra pas au cercle pendant deux semaines.`
+        : `Le sang de ${nom} ne passe pas : il ne correspond pas à ce que votre sang exige.`);
+    }
+    if (b.dataset.action === "observer" && r?.data) alert(r.data);
+    actualiser();
+  };
+}
+
+function ficheCandidat(m) {
+  return `
+    <article class="fiche-perso">
+      <div class="portrait">${portrait("membres", m.slug, m.nom)}</div>
+      <div class="fiche-texte">
+        <h3>${esc(m.nom)}, ${m.age} ans</h3>
+        <div class="origine">${esc(m.metier)}. ${esc(m.parrain)}</div>
+        <p>${esc(m.presentation)}</p>
+        ${m.indices?.length ? `<ul class="indices">${m.indices.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+        <div class="actions">
+          <button class="bouton" data-action="accepter" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Admettre</button>
+          <button class="bouton-second" data-action="observer" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Se renseigner</button>
+          <button class="lien-discret" data-action="decliner" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Décliner</button>
+        </div>
+      </div>
+    </article>`;
+}
+
+function ficheMembre(m) {
+  return `
+    <article class="fiche-perso fiche-membre">
+      <div class="portrait">${portrait("membres", m.slug, m.nom)}</div>
+      <div class="fiche-texte">
+        <h3>${esc(m.nom)}, ${m.age} ans</h3>
+        <div class="origine">${esc(m.metier)}. Humeur : ${esc(m.humeur)}${m.anemie ? ". Souffrant, absent pour le moment" : ""}</div>
+        ${m.avertissement ? `<p class="secret">Semble sur le point de quitter le cercle.</p>` : ""}
+        ${m.atout ? `<p><strong>Peut vous rendre service :</strong> ${esc(m.atout)}</p>` : ""}
+        ${m.indices?.length ? `<ul class="indices">${m.indices.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+        <div class="actions">
+          ${m.anemie ? "" : `<button class="bouton-second" data-action="nourrir" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Se nourrir</button>`}
+        </div>
+      </div>
+    </article>`;
+}
+
+async function ongletPersonnel(boite, c, actualiser) {
+  const [{ data: offres }, { data: equipe }] = await Promise.all([
+    sb.from("offres_personnel").select("slug, personnel(*)").eq("semaine", c.semaine_courante),
+    sb.from("personnel").select("*").eq("statut", "embauche").order("ordre"),
+  ]);
+  const disponibles = (offres || []).map((o) => o.personnel).filter((p) => p && p.statut === "disponible");
+  const masse = (equipe || []).reduce((t, p) => t + Number(p.salaire_hebdo), 0);
+  boite.innerHTML = `
+    <h2>Candidatures transmises par Lakeshore Staffing</h2>
+    ${c.semaine_courante === 0 ? `<p class="clause-discrete">L'agence vous transmettra ses premiers dossiers le ${jourHeure(c.date_debut)}.</p>`
+      : disponibles.length ? disponibles.map((p) => `
+        <article class="fiche-perso">
+          <div class="portrait">${portrait("personnel", p.slug, p.nom)}</div>
+          <div class="fiche-texte">
+            <h3>${esc(p.nom)}, ${p.age} ans</h3>
+            <div class="origine">${LIBELLE_POSTE[p.poste]}. Salaire demandé : ${dollars(p.salaire_hebdo)} par semaine</div>
+            <p>${esc(p.presentation)}</p>
+            <div class="actions"><button class="bouton" data-embaucher="${p.slug}" data-nom="${esc(p.nom)}">Embaucher</button></div>
+          </div>
+        </article>`).join("")
+      : `<p class="clause-discrete">Aucun dossier cette semaine. L'agence vous en transmettra d'autres au prochain relevé.</p>`}
+    <h2>Votre équipe (${(equipe || []).length})</h2>
+    ${(equipe || []).length ? `<p class="clause-discrete">Masse salariale : ${dollars(masse)} par semaine.</p>` + equipe.map((p) => `
+      <article class="fiche-perso">
+        <div class="portrait">${portrait("personnel", p.slug, p.nom)}</div>
+        <div class="fiche-texte">
+          <h3>${esc(p.nom)}</h3>
+          <div class="origine">${LIBELLE_POSTE[p.poste]}, ${dollars(p.salaire_hebdo)} par semaine</div>
+          <div class="actions"><button class="lien-discret" data-congedier="${p.slug}" data-nom="${esc(p.nom)}">Congédier</button></div>
+        </div>
+      </article>`).join("") : `<p class="clause-discrete">Personne ne travaille encore au cercle. Sans barman, le bar rapporte moitié moins ; sans serveur, une soirée ne peut pas accueillir plus de six invités.</p>`}
+    <p class="erreur" id="erreur-perso" aria-live="polite"></p>`;
+  boite.onclick = async (ev) => {
+    const e = ev.target.closest("[data-embaucher]"), q = ev.target.closest("[data-congedier]");
+    if (!e && !q) return;
+    let r;
+    if (e) { if (!confirm(`Embaucher ${e.dataset.nom} ?`)) return; r = await sb.rpc("embaucher", { p_slug: e.dataset.embaucher }); }
+    else { if (!confirm(`Congédier ${q.dataset.nom} ? Il ne reviendra pas.`)) return; r = await sb.rpc("congedier", { p_slug: q.dataset.congedier }); }
+    if (r.error) { boite.querySelector("#erreur-perso").textContent = messageErreur(r.error); return; }
+    actualiser();
+  };
 }
 
 function blocFournisseur(f) {
@@ -361,6 +538,7 @@ async function vueMJ() {
     <div class="onglets" role="tablist">
       <button class="onglet" role="tab" data-onglet="coulisses" aria-selected="${etat.ongletMJ === "coulisses"}">Coulisses</button>
       <button class="onglet" role="tab" data-onglet="joueuse" aria-selected="${etat.ongletMJ === "joueuse"}">Vue de la joueuse</button>
+      <button class="onglet" role="tab" data-onglet="membresmj" aria-selected="${etat.ongletMJ === "membresmj"}">Membres</button>
       <button class="onglet" role="tab" data-onglet="personnel" aria-selected="${etat.ongletMJ === "personnel"}">Personnel</button>
       <button class="onglet" role="tab" data-onglet="visuels" aria-selected="${etat.ongletMJ === "visuels"}">Visuels des soirées</button>
     </div>
@@ -373,11 +551,17 @@ async function vueMJ() {
   const cible = app.querySelector("#contenu-mj");
   if (etat.ongletMJ === "joueuse") return vueJoueuse(cible);
   if (etat.ongletMJ === "personnel") return vuePersonnelMJ(cible);
+  if (etat.ongletMJ === "membresmj") return vueMembresMJ(cible);
   if (etat.ongletMJ === "visuels") return vueVisuelsMJ(cible);
 
+  if (etat.cercle.statut === "actif") { await sb.rpc("faire_avancer"); await chargerCercle(); }
   const c = etat.cercle;
-  const [journal, locaux, { data: soirees }] = await Promise.all([chargerJournal(), chargerLocaux(),
-    sb.from("evenements").select("titre, date_evt, prix_participation, cout_alcool, texte_libre, theme").order("date_evt", { ascending: false }).limit(12)]);
+  const [journal, locaux, { data: soirees }, { data: derniere }, { data: lignesMJ }] = await Promise.all([chargerJournal(), chargerLocaux(),
+    sb.from("evenements").select("titre, date_evt, prix_participation, cout_alcool, texte_libre, theme").order("date_evt", { ascending: false }).limit(12),
+    sb.from("semaines").select("*").not("cloturee_le", "is", null).order("numero", { ascending: false }).limit(1),
+    sb.from("releve").select("*").order("id", { ascending: false }).limit(40)]);
+  const sem = derniere?.[0];
+  const prochain = prochaineCloture(c);
   const local = locaux.find((l) => l.id === c.local_id);
   const statuts = { invitation: "Carte remise, contrat pas encore signé", contrat_signe: "Contrat signé, cercle pas encore fondé", actif: "Cercle fondé" };
   cible.innerHTML = `
@@ -393,7 +577,30 @@ async function vueMJ() {
         <dt>Fondé le</dt><dd>${c.fonde_le ? dateCourte(c.fonde_le) : "—"}</dd>
         <dt>Ligne de crédit</dt><dd>${dollars(c.ligne_credit)} (utilisé : ${dollars(c.credit_utilise)})</dd>
         <dt>Trésorerie</dt><dd>${dollars(c.tresorerie)}</dd>
+        <dt>Cotisation</dt><dd>${dollars(c.cotisation_mensuelle)} par mois</dd>
+        <dt>Semaine</dt><dd>${c.statut !== "actif" ? "—" : c.semaine_courante === 0 ? `démarre le ${jourHeure(c.date_debut)}` : `${c.semaine_courante}, clôture le ${jourHeure(prochain)}`}${c.en_pause ? " (en pause)" : ""}</dd>
+        <dt>Standing</dt><dd>${c.standing}</dd>
       </dl>
+      ${c.statut === "actif" ? `
+      <h2>Calendrier</h2>
+      <div class="actions">
+        <button class="bouton-second" id="mj-avancer">Avancer d'une semaine (clôturer maintenant)</button>
+        <button class="bouton-second" id="mj-pause">${c.en_pause ? "Relancer le calendrier" : "Mettre en pause"}</button>
+      </div>
+      <h2>Ligne exceptionnelle</h2>
+      <form id="mj-ligne" class="sous-form">
+        <label for="l-libelle">Libellé (ce que verra le joueur)</label>
+        <input id="l-libelle" type="text" required placeholder="Ex. : Cargaison perdue sur la I-94">
+        <div class="deux-col">
+          <div><label for="l-montant">Montant ($, négatif pour une dépense)</label><input id="l-montant" type="number" step="10" required></div>
+          <div><label><input id="l-visible" type="checkbox" checked> Visible par le joueur</label></div>
+        </div>
+        <div class="actions"><button class="bouton" type="submit">Ajouter au relevé</button></div>
+      </form>
+      <h2>Dernier relevé${sem ? ` (semaine ${sem.numero})` : ""}</h2>
+      ${sem ? `<p class="clause-discrete">Recettes ${dollars(sem.resume?.recettes)}, dépenses ${dollars(sem.resume?.depenses)}, résultat ${dollars(sem.resume?.resultat)}. Passages au bar : ${sem.resume?.passages_bar}. Membres : ${sem.resume?.membres}.</p>
+        <table class="table-releve">${(lignesMJ || []).filter((l) => l.semaine === sem.numero).reverse().map((l) => `<tr><td>${esc(l.libelle)}${l.visible_gerante ? "" : " <span class=\"badge-mj\">(MJ)</span>"}${l.details?.presents ? `<br><span class="clause-discrete">${l.details.presents.map(esc).join(", ")}</span>` : ""}</td><td>${dollars(l.montant)}</td></tr>`).join("")}</table>`
+        : `<p class="clause-discrete">Aucune semaine clôturée.</p>`}` : ""}
       <h2>Soirées annoncées</h2>
       ${soirees?.length ? `<ul class="journal">${soirees.map((e) => `<li><time>${dateCourte(e.date_evt)}</time>${esc(e.titre)}, participation ${dollars(e.prix_participation)}, alcool ${dollars(e.cout_alcool)}${e.texte_libre ? ` <span class="secret">(composée par le joueur : bonus possible)</span>` : ""}</li>`).join("")}</ul>` : `<p class="clause-discrete">Aucune soirée annoncée.</p>`}
       <h2>Journal complet</h2>
@@ -405,8 +612,24 @@ async function vueMJ() {
       <p class="erreur" id="erreur"></p>
     </section>`;
   cible.querySelector("#actualiser").addEventListener("click", async () => { await chargerCercle(); vueMJ(); });
+  const err = (e) => { cible.querySelector("#erreur").textContent = messageErreur(e); };
+  cible.querySelector("#mj-avancer")?.addEventListener("click", async () => {
+    if (!confirm("Clôturer la semaine en cours maintenant ? Le relevé sera calculé et une nouvelle semaine commencera.")) return;
+    const { error } = await sb.rpc("mj_avancer_semaine"); if (error) return err(error);
+    await chargerCercle(); vueMJ();
+  });
+  cible.querySelector("#mj-pause")?.addEventListener("click", async () => {
+    const { error } = await sb.rpc("mj_pause", { p_pause: !c.en_pause }); if (error) return err(error);
+    await chargerCercle(); vueMJ();
+  });
+  cible.querySelector("#mj-ligne")?.addEventListener("submit", async (ev) => {
+    ev.preventDefault(); const f = ev.target;
+    const { error } = await sb.rpc("mj_ligne", { p_libelle: f["l-libelle"].value.trim(), p_montant: Number(f["l-montant"].value), p_visible: f["l-visible"].checked });
+    if (error) return err(error);
+    await chargerCercle(); vueMJ();
+  });
   cible.querySelector("#reinit").addEventListener("click", async () => {
-    if (!confirm("Effacer la signature, le nom du cercle, le bail et toute la vitrine pour revenir à l'invitation ?")) return;
+    if (!confirm("Tout effacer pour revenir à l'invitation : signature, nom, bail, vitrine, membres, personnel, relevés et journal ?")) return;
     const { data, error } = await sb.rpc("reinitialiser_cercle");
     if (!error) {
       const tout = "00000000-0000-0000-0000-000000000000";
@@ -414,7 +637,12 @@ async function vueMJ() {
         sb.from("evenements").delete().neq("id", tout),
         sb.from("vitrine_produits").delete().neq("produit_id", tout),
         sb.from("vitrine_photos").delete().neq("id", tout),
+        sb.from("semaines").delete().gte("numero", -1),
+        sb.from("releve").delete().gte("id", 0),
+        sb.from("observations").delete().gte("id", 0),
+        sb.from("offres_personnel").delete().gte("semaine", -1),
       ]);
+      await sb.from("journal").delete().gte("id", 0);
     }
     if (error) { cible.querySelector("#erreur").textContent = messageErreur(error); return; }
     etat.cercle = data;
@@ -729,6 +957,40 @@ document.addEventListener("click", async (ev) => {
   catch { b.textContent = "Copie impossible, sélectionne le texte"; }
   setTimeout(() => { b.textContent = "Copier la description"; }, 1800);
 });
+
+/* ---------- Membres (MJ) ---------- */
+const STATUT_MEMBRE = { vivier: "Dans le vivier", candidat: "Candidat cette semaine", membre: "Membre", refuse: "Refusé", parti: "Parti", vance: "Passé chez Vance" };
+const FORTUNE = { 1: "modeste", 2: "aisé", 3: "fortuné" };
+const STYLE_PORTRAIT = ". Warm low-key lighting, dark wood-paneled background, shallow depth of field, cinematic, muted warm colors, realistic, 35mm film look, no text, no watermark.";
+async function vueMembresMJ(cible) {
+  cible.innerHTML = `<p class="chargement">Ouverture des dossiers…</p>`;
+  const [{ data: ms, error: e1 }, { data: mj, error: e2 }] = await Promise.all([
+    sb.from("membres").select("*").order("ordre"), sb.from("membres_mj").select("*")]);
+  if (e1 || e2) { cible.innerHTML = `<p class="erreur">${esc(messageErreur(e1 || e2))}</p>`; return; }
+  const parSlug = Object.fromEntries(mj.map((m) => [m.slug, m]));
+  const ordre = ["membre", "candidat", "vivier", "parti", "refuse", "vance"];
+  ms.sort((a, b) => ordre.indexOf(a.statut) - ordre.indexOf(b.statut));
+  cible.innerHTML = `
+    <section class="feuille">
+      <h1>Membres et vivier</h1>
+      <p class="badge-mj">Visible uniquement par le MJ. Les profils marqués « chasse » viennent de tes lots de chasse.</p>
+      ${ms.map((m) => { const j = parSlug[m.slug] || {}; const prompt = "Portrait photograph, head and shoulders, of " + (j.apparence || "") + STYLE_PORTRAIT; return `
+        <article class="fiche-perso">
+          <div class="portrait">${portrait("membres", m.slug, m.nom)}</div>
+          <div class="fiche-texte">
+            <h3>${esc(m.nom)}, ${m.age} ans</h3>
+            <div class="origine">${STATUT_MEMBRE[m.statut]}${m.statut === "membre" ? `, satisfaction ${m.satisfaction}/100` : ""}. ${esc(m.metier)}</div>
+            <p class="clause-discrete">Fortune ${FORTUNE[j.fortune]}, assiduité ${Math.round(j.assiduite * 100)} %, nourricier ${j.nourricier}/3, réseau ${j.reseau}/3, standing requis ${j.standing_min}. Goûts : ${(j.gouts || []).join(", ")}.${j.atout_libelle ? ` Atout : ${esc(j.atout_libelle)}.` : ""}</p>
+            ${j.secret ? `<p class="secret"><strong>Secret :</strong> ${esc(j.secret)}</p>` : ""}
+            <details class="prompt">
+              <summary>Description pour le portrait (fichier ${esc(m.slug)}.jpg)</summary>
+              <p class="prompt-texte">${esc(prompt)}</p>
+              <button type="button" class="bouton-second copier" data-copier="${esc(prompt)}">Copier la description</button>
+            </details>
+          </div>
+        </article>`; }).join("")}
+    </section>`;
+}
 
 /* ---------- Visuels des soirées (MJ) ---------- */
 const STYLE_VISUEL = ". Luxury vintage bar photography, rich dark mahogany wood, warm amber candlelight and brass reflections, shallow depth of field, cinematic, realistic, no people, no readable text on labels, no logo, no watermark.";

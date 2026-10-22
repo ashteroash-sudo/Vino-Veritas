@@ -378,3 +378,20 @@ input[type=file] { font: inherit; font-size: .9rem; margin-bottom: 18px; max-wid
 .choix-visuel:has(input:focus-visible) { outline: 2px solid var(--laiton); outline-offset: 2px; }
 .choix-texte { display: grid; place-items: center; text-align: center; aspect-ratio: 1; border: 1px dashed var(--encre-pale); font-size: .85rem; color: var(--encre); padding: 6px; }
 .choix-texte:has(input:checked) { border: 2px solid var(--sceau); background: rgba(123,34,40,.06); }
+
+/* ---------- Tableau de bord du gérant ---------- */
+.entete-compte { margin-bottom: 18px; }
+.onglets-gerant { margin: 0 0 18px; }
+.releve-semaine { border-top: 1px solid var(--registre-ombre); padding: 8px 0; }
+.releve-semaine summary { display: flex; justify-content: space-between; gap: 12px; cursor: pointer; font-family: var(--serif-titre); font-size: 1.15rem; }
+.table-releve { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: .95rem; }
+.table-releve td { padding: 6px 0; border-bottom: 1px dotted var(--registre-ombre); vertical-align: top; }
+.table-releve td:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; padding-left: 12px; }
+.table-releve tr.total td { font-weight: 600; border-bottom: none; }
+.positif { color: var(--ok); }
+.negatif { color: var(--sceau); }
+.ligne-cotisation input[type=number] { width: 120px; margin: 0; }
+.ligne-cotisation .actions { margin-top: 0; }
+.indices { font-size: .92rem; font-style: italic; color: var(--encre-pale); padding-left: 18px; margin: 4px 0 8px; }
+.fiche-perso .actions { margin-top: 8px; }
+.coulisses h2 { margin-top: 28px; }
