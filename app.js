@@ -247,7 +247,7 @@ function texteContrat(c, signe) {
     <article class="feuille" id="contrat">
       <h2>Accord de garantie et d'ouverture de compte</h2>
       <p class="clause-discrete">Entre Calloway &amp; Sons, négociants (« la Maison »), M. Victor Vance, de la Vance Fiduciary Trust (« le Garant »), et le titulaire du présent compte (« le Titulaire »).</p>
-      <p class="article"><strong>Article 1.</strong> La Maison ouvre au nom du Titulaire une ligne de crédit fournisseur de ${dollars(c.ligne_credit)}, exclusivement destinée à l'acquisition de spiritueux auprès des fournisseurs de la Maison.</p>
+      <p class="article"><strong>Article 1.</strong> La Maison ouvre au nom du Titulaire une ligne de crédit fournisseur de ${dollars(c.ligne_credit)}, exclusivement destinée à l'acquisition de spiritueux auprès des fournisseurs de la Maison. Ce plafond pourra être relevé à mesure que l'établissement du Titulaire aura fait ses preuves.</p>
       <p class="article"><strong>Article 2.</strong> Les factures sont réglées sur les recettes du cercle du Titulaire. Un relevé est arrêté chaque mardi à dix-neuf heures.</p>
       <p class="article"><strong>Article 3.</strong> Le Garant répond envers la Maison de l'ensemble des engagements du Titulaire.</p>
       <p class="article"><strong>Article 4.</strong> En reconnaissance de sa garantie, le Titulaire accorde au Garant une courtoisie, dont la nature sera précisée par le Garant en temps opportun. Le Titulaire s'engage à l'honorer de bonne grâce.</p>
@@ -523,7 +523,9 @@ const AIDES = {
 
 Chaque mardi à 19 h, la Maison arrête un relevé : loyer, salaires, factures et alcool des soirées sont débités ; cotisations, consommations au bar et soirées sont encaissées. Le tableau Entrées / Sorties montre d'où vient l'argent et où il part.
 
-Si la trésorerie passe sous zéro, la Maison avance l'argent sur votre ligne de crédit. Remboursez-la quand vous le pouvez : une dette qui dure finit par avoir des conséquences.`,
+Si la trésorerie passe sous zéro, la Maison avance l'argent sur votre ligne de crédit. Remboursez-la quand vous le pouvez : une dette qui dure finit par avoir des conséquences.
+
+Le plafond de départ est modeste. La Maison le relève quand votre cercle a prouvé qu'il attire du monde : à 5 000 $ de recettes cumulées, puis à 15 000 $.`,
   membres: `Les membres font vivre le cercle.
 
 Chaque semaine, de nouveaux candidats se présentent. Avant de les admettre, « Se renseigner » (deux fois par semaine) révèle un détail sur eux : tous ne sont pas ce qu'ils paraissent.
@@ -1001,7 +1003,7 @@ async function vueMJ() {
         <dt>Devise</dt><dd>${esc(c.devise) || "—"}</dd>
         <dt>Local</dt><dd>${local ? `${esc(local.titre)} (${dollars(local.loyer_hebdo)} par semaine)` : "—"}</dd>
         <dt>Fondé le</dt><dd>${c.fonde_le ? dateCourte(c.fonde_le) : "—"}</dd>
-        <dt>Ligne de crédit</dt><dd>${dollars(c.ligne_credit)} (utilisé : ${dollars(c.credit_utilise)})</dd>
+        <dt>Ligne de crédit</dt><dd>${dollars(c.ligne_credit)} (utilisé : ${dollars(c.credit_utilise)}, palier ${c.palier_credit ?? 0}/2 : 5 000 $ puis 15 000 $ de recettes cumulées, +7 500 $ chacun)</dd>
         <dt>Trésorerie</dt><dd>${dollars(c.tresorerie)}</dd>
         <dt>Cotisation</dt><dd>${dollars(c.cotisation_mensuelle)} par mois</dd>
         <dt>Semaine</dt><dd>${c.statut !== "actif" ? "—" : c.semaine_courante === 0 ? `démarre le ${jourHeure(c.date_debut)}` : `${c.semaine_courante}, clôture le ${jourHeure(prochain)}`}${c.en_pause ? " (en pause)" : ""}</dd>
