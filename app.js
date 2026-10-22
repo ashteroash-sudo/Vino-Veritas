@@ -331,11 +331,13 @@ async function vueCompte(cible) {
       <p class="avis">Votre première allocation sera proposée le ${prochainMardi19h().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à 19 h. D'ici là, vous pouvez consulter les références de nos fournisseurs.</p>
       ${journalPublic.length ? `<h2>Correspondance</h2><ul class="journal">${journalPublic.map((j) => `<li><time>${dateCourte(j.cree_le)}</time>${esc(j.message)}</li>`).join("")}</ul>` : ""}
     </section>
+    <section class="feuille" id="vitrine-admin"></section>
     <section class="feuille">
       <h2>Nos fournisseurs</h2>
       ${catalogue.map(blocFournisseur).join("")}
       <p class="clause-discrete">Prix d'achat à la bouteille, hors frais de transport. Les références rares ne sont proposées qu'aux comptes de confiance.</p>
     </section>`;
+  adminVitrine(cible.querySelector("#vitrine-admin"), catalogue);
 }
 
 function blocFournisseur(f) {
@@ -399,12 +401,186 @@ async function vueMJ() {
     </section>`;
   cible.querySelector("#actualiser").addEventListener("click", async () => { await chargerCercle(); vueMJ(); });
   cible.querySelector("#reinit").addEventListener("click", async () => {
-    if (!confirm("Effacer la signature, le nom du cercle et le bail pour revenir à l'invitation ?")) return;
+    if (!confirm("Effacer la signature, le nom du cercle, le bail et toute la vitrine pour revenir à l'invitation ?")) return;
     const { data, error } = await sb.rpc("reinitialiser_cercle");
+    if (!error) {
+      const tout = "00000000-0000-0000-0000-000000000000";
+      await Promise.all([
+        sb.from("evenements").delete().neq("id", tout),
+        sb.from("vitrine_produits").delete().neq("produit_id", tout),
+        sb.from("vitrine_photos").delete().neq("id", tout),
+      ]);
+    }
     if (error) { cible.querySelector("#erreur").textContent = messageErreur(error); return; }
     etat.cercle = data;
     vueMJ();
   });
+}
+
+/* ---------- Édition de la vitrine (gérant) ---------- */
+const urlImage = (chemin) =>
+  !chemin ? "" : /^(img\/|https?:)/.test(chemin) ? chemin : `${SUPABASE_URL}/storage/v1/object/public/vitrine/${chemin}`;
+
+// Réduit l'image (1600 px max) avant envoi, pour des pages légères.
+async function envoyerImage(fichier) {
+  const bitmap = await createImageBitmap(fichier);
+  const echelle = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * echelle);
+  canvas.height = Math.round(bitmap.height * echelle);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.85));
+  const chemin = `${crypto.randomUUID()}.jpg`;
+  const { error } = await sb.storage.from("vitrine").upload(chemin, blob, { contentType: "image/jpeg" });
+  if (error) throw error;
+  return chemin;
+}
+
+async function adminVitrine(boite, catalogue) {
+  const c = etat.cercle;
+  const [{ data: evts }, { data: mises }, { data: photos }] = await Promise.all([
+    sb.from("evenements").select("*").order("date_evt"),
+    sb.from("vitrine_produits").select("*").order("ordre"),
+    sb.from("vitrine_photos").select("*").order("ordre").order("cree_le"),
+  ]);
+  const produits = catalogue.flatMap((f) => f.produits.map((p) => ({ ...p, fournisseur: f.nom })));
+  const parId = Object.fromEntries(produits.map((p) => [p.id, p]));
+  const dejaMis = new Set(mises.map((m) => m.produit_id));
+
+  boite.innerHTML = `
+    <div class="en-tete-lettre">
+      <span class="expediteur">La vitrine du cercle</span>
+      <a href="/cercle" target="_blank" rel="noopener">Voir la vitrine publique</a>
+    </div>
+    <p class="clause-discrete">Ce que vous publiez ici est visible par toute personne qui connaît l'adresse de votre vitrine.</p>
+
+    <details class="volet" open>
+      <summary>Présentation</summary>
+      <form id="f-textes">
+        <label for="accroche">Phrase d'accueil</label>
+        <input id="accroche" type="text" maxlength="160" value="${esc(c.accroche)}" placeholder="Une phrase qui donne le ton">
+        <label for="presentation">L'esprit du cercle</label>
+        <textarea id="presentation" maxlength="2000" rows="6" placeholder="Qui vous recevez, ce qu'on y boit, ce qu'on y trouve. Laissez une ligne vide pour changer de paragraphe.">${esc(c.presentation)}</textarea>
+        <div class="actions"><button class="bouton" type="submit">Enregistrer la présentation</button><span class="statut" aria-live="polite"></span></div>
+      </form>
+    </details>
+
+    <details class="volet" ${evts.length ? "" : "open"}>
+      <summary>Soirées (${evts.length})</summary>
+      <ul class="liste-admin">${evts.map((e) => `
+        <li>
+          ${e.image ? `<img src="${esc(urlImage(e.image))}" alt="">` : `<span class="vignette-vide"></span>`}
+          <div><strong>${esc(e.titre)}</strong><br><span class="clause-discrete">${dateCourte(e.date_evt)}, ${Number(e.prix_participation) > 0 ? dollars(e.prix_participation) : "gratuit pour les membres"}</span></div>
+          <button type="button" class="lien-discret" data-retirer-evt="${e.id}">Retirer</button>
+        </li>`).join("") || `<li class="clause-discrete">Aucune soirée annoncée.</li>`}</ul>
+      <form id="f-soiree" class="sous-form">
+        <h3>Annoncer une soirée</h3>
+        <label for="s-titre">Titre</label>
+        <input id="s-titre" type="text" maxlength="100" required placeholder="Ex. : Les cognacs de l'après-guerre">
+        <div class="deux-col">
+          <div><label for="s-date">Date et heure</label><input id="s-date" type="datetime-local" required></div>
+          <div><label for="s-prix">Participation ($)</label><input id="s-prix" type="number" min="0" step="5" value="0"></div>
+        </div>
+        <label for="s-desc">Description</label>
+        <textarea id="s-desc" maxlength="800" rows="3" placeholder="Ce qui sera servi, l'ambiance, la tenue attendue…"></textarea>
+        <label for="s-image">Affiche ou visuel (facultatif)</label>
+        <input id="s-image" type="file" accept="image/*">
+        <div class="actions"><button class="bouton" type="submit">Publier la soirée</button><span class="statut" aria-live="polite"></span></div>
+      </form>
+    </details>
+
+    <details class="volet">
+      <summary>Bouteilles mises en avant (${mises.length})</summary>
+      <ul class="liste-admin">${mises.map((m) => { const p = parId[m.produit_id]; return p ? `
+        <li>
+          <span class="vignette-vide"></span>
+          <div><strong>${esc(p.nom)}</strong>${m.note ? `<br><em class="clause-discrete">« ${esc(m.note)} »</em>` : ""}</div>
+          <button type="button" class="lien-discret" data-retirer-produit="${m.produit_id}">Retirer</button>
+        </li>` : ""; }).join("") || `<li class="clause-discrete">Aucune bouteille mise en avant.</li>`}</ul>
+      <form id="f-produit" class="sous-form">
+        <label for="p-choix">Bouteille</label>
+        <select id="p-choix" required>
+          <option value="">Choisir une référence</option>
+          ${produits.filter((p) => !dejaMis.has(p.id)).map((p) => `<option value="${p.id}">${esc(p.nom)} (${esc(p.categorie)})</option>`).join("")}
+        </select>
+        <label for="p-note">Votre mot sur cette bouteille (facultatif)</label>
+        <input id="p-note" type="text" maxlength="200" placeholder="Ex. : Le compagnon idéal d'une soirée d'hiver.">
+        <div class="actions"><button class="bouton" type="submit">Mettre en avant</button><span class="statut" aria-live="polite"></span></div>
+      </form>
+    </details>
+
+    <details class="volet">
+      <summary>Photos du salon (${photos.length})</summary>
+      <div class="grille-photos-admin">${photos.map((p) => `
+        <figure>
+          <img src="${esc(urlImage(p.chemin))}" alt="${esc(p.legende || "")}">
+          <figcaption>${esc(p.legende || "")} <button type="button" class="lien-discret" data-retirer-photo="${p.id}">Retirer</button></figcaption>
+        </figure>`).join("")}</div>
+      <form id="f-photo" class="sous-form">
+        <label for="ph-fichiers">Ajouter des photos</label>
+        <input id="ph-fichiers" type="file" accept="image/*" multiple required>
+        <label for="ph-legende">Légende (facultative, appliquée à toutes)</label>
+        <input id="ph-legende" type="text" maxlength="120">
+        <div class="actions"><button class="bouton" type="submit">Envoyer</button><span class="statut" aria-live="polite"></span></div>
+      </form>
+    </details>`;
+
+  const recharger = () => adminVitrine(boite, catalogue);
+  const occupe = (form, msg) => { form.querySelector("button[type=submit]").disabled = !!msg; form.querySelector(".statut").textContent = msg || ""; };
+  const echec = (form, e) => { form.querySelector("button[type=submit]").disabled = false; form.querySelector(".statut").textContent = messageErreur(e); };
+
+  boite.querySelector("#f-textes").addEventListener("submit", async (ev) => {
+    ev.preventDefault(); const f = ev.target; occupe(f, "Enregistrement…");
+    const { error } = await sb.rpc("maj_textes_vitrine", { p_accroche: f.accroche.value, p_presentation: f.presentation.value });
+    if (error) return echec(f, error);
+    etat.cercle.accroche = f.accroche.value; etat.cercle.presentation = f.presentation.value;
+    occupe(f, ""); f.querySelector(".statut").textContent = "Enregistré.";
+  });
+
+  boite.querySelector("#f-soiree").addEventListener("submit", async (ev) => {
+    ev.preventDefault(); const f = ev.target; occupe(f, "Publication…");
+    try {
+      const image = f["s-image"].files[0] ? await envoyerImage(f["s-image"].files[0]) : null;
+      const { error } = await sb.from("evenements").insert({
+        titre: f["s-titre"].value.trim(), date_evt: new Date(f["s-date"].value).toISOString(),
+        prix_participation: Number(f["s-prix"].value) || 0, description: f["s-desc"].value.trim() || null, image,
+      });
+      if (error) throw error;
+      recharger();
+    } catch (e) { echec(f, e); }
+  });
+
+  boite.querySelector("#f-produit").addEventListener("submit", async (ev) => {
+    ev.preventDefault(); const f = ev.target; occupe(f, "…");
+    const { error } = await sb.from("vitrine_produits").insert({ produit_id: f["p-choix"].value, note: f["p-note"].value.trim() || null, ordre: mises.length });
+    if (error) return echec(f, error);
+    recharger();
+  });
+
+  boite.querySelector("#f-photo").addEventListener("submit", async (ev) => {
+    ev.preventDefault(); const f = ev.target;
+    const fichiers = [...f["ph-fichiers"].files];
+    try {
+      for (const [i, fi] of fichiers.entries()) {
+        occupe(f, `Envoi ${i + 1} sur ${fichiers.length}…`);
+        const chemin = await envoyerImage(fi);
+        const { error } = await sb.from("vitrine_photos").insert({ chemin, legende: f["ph-legende"].value.trim() || null, ordre: photos.length + i });
+        if (error) throw error;
+      }
+      recharger();
+    } catch (e) { echec(f, e); }
+  });
+
+  boite.onclick = async (ev) => {
+    const b = ev.target.closest("[data-retirer-evt],[data-retirer-produit],[data-retirer-photo]");
+    if (!b || !confirm("Retirer cet élément de la vitrine ?")) return;
+    let r;
+    if (b.dataset.retirerEvt) r = await sb.from("evenements").delete().eq("id", b.dataset.retirerEvt);
+    else if (b.dataset.retirerProduit) r = await sb.from("vitrine_produits").delete().eq("produit_id", b.dataset.retirerProduit);
+    else r = await sb.from("vitrine_photos").delete().eq("id", b.dataset.retirerPhoto);
+    if (r.error) return alert(messageErreur(r.error));
+    recharger();
+  };
 }
 
 /* ---------- Fiches du personnel (MJ) ---------- */

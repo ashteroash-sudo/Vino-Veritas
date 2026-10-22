@@ -1,0 +1,157 @@
+:root {
+  --nuit: #241015;        /* bordeaux presque noir, fond */
+  --bordeaux: #43161f;
+  --bordeaux-clair: #5c2230;
+  --or: #c9a55e;
+  --os: #efe6d8;          /* texte principal */
+  --fumee: #b3a394;       /* texte secondaire */
+  --filet: rgba(201,165,94,.28);
+  --display: "Bodoni Moda", "Didot", Georgia, serif;
+  --texte: "Jost", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--nuit);
+  color: var(--os);
+  font-family: var(--texte);
+  font-weight: 300;
+  font-size: 17px;
+  line-height: 1.7;
+}
+img { max-width: 100%; display: block; }
+.attente { text-align: center; padding: 40vh 16px; color: var(--fumee); }
+
+/* ---------- Ouverture ---------- */
+.ouverture {
+  position: relative;
+  min-height: 92vh;
+  display: grid;
+  place-items: end center;
+  padding: 0 16px 9vh;
+  text-align: center;
+  overflow: hidden;
+}
+.ouverture-fond {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center;
+  filter: saturate(.75) brightness(.55);
+}
+.ouverture::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(36,16,21,.15) 0%, rgba(36,16,21,.55) 55%, var(--nuit) 100%);
+}
+.ouverture-contenu { position: relative; z-index: 1; max-width: 900px; }
+.lieu-mention { font-size: .9rem; letter-spacing: .04em; color: var(--fumee); margin-bottom: 18px; }
+.nom-cercle {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2.6rem, 9vw, 6.2rem);
+  line-height: .98;
+  margin: 0;
+  overflow-wrap: anywhere;
+  animation: lever 1.4s ease-out both;
+}
+.devise {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: clamp(1.1rem, 2.6vw, 1.5rem);
+  color: var(--or);
+  margin: 22px auto 0;
+  max-width: 34ch;
+  animation: lever 1.4s .35s ease-out both;
+}
+@keyframes lever { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .nom-cercle, .devise { animation: none; } }
+
+/* ---------- Sections ---------- */
+section.bloc {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 72px 16px;
+  border-top: 1px solid var(--filet);
+}
+section.bloc:first-of-type { border-top: none; }
+.bloc h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.8rem, 4.5vw, 2.6rem);
+  line-height: 1.1;
+  margin: 0 0 28px;
+}
+.esprit p { font-size: 1.1rem; max-width: 60ch; margin: 0 0 1.1em; }
+.esprit .accroche {
+  font-family: var(--display); font-style: italic; font-size: clamp(1.3rem, 3vw, 1.7rem);
+  line-height: 1.35; color: var(--or); max-width: 30ch;
+}
+
+/* ---------- Soirées ---------- */
+.soirees { list-style: none; padding: 0; margin: 0; }
+.soiree {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 4px 28px;
+  padding: 26px 0;
+  border-bottom: 1px solid var(--filet);
+}
+.soiree:first-child { padding-top: 0; }
+.soiree .jour { font-family: var(--display); font-size: 3.4rem; line-height: .9; color: var(--or); }
+.soiree .mois { font-size: .9rem; color: var(--fumee); margin-top: 6px; }
+.soiree h3 { font-family: var(--display); font-weight: 400; font-size: 1.5rem; line-height: 1.2; margin: 0 0 4px; }
+.soiree .heure-prix { font-size: .95rem; color: var(--fumee); margin-bottom: 10px; }
+.soiree p { margin: 0; max-width: 58ch; }
+.soiree .visuel { grid-column: 2; margin-top: 16px; cursor: zoom-in; border: none; padding: 0; background: none; }
+.soiree .visuel img { width: 100%; max-height: 360px; object-fit: cover; }
+.vide { color: var(--fumee); font-style: italic; }
+.passees { margin-top: 36px; font-size: .95rem; color: var(--fumee); }
+.passees span + span::before { content: ", "; }
+
+/* ---------- Carte ---------- */
+.carte-liste { list-style: none; padding: 0; margin: 0; display: grid; gap: 34px; }
+.bouteille h3 { font-family: var(--display); font-weight: 400; font-size: 1.45rem; margin: 0; line-height: 1.2; }
+.bouteille .provenance { color: var(--fumee); font-size: .95rem; }
+.bouteille .note {
+  font-family: var(--display); font-style: italic; font-size: 1.15rem; color: var(--or);
+  margin: 10px 0 0; padding-left: 18px; border-left: 1px solid var(--or); max-width: 54ch;
+}
+.bouteille .desc { margin: 6px 0 0; max-width: 58ch; }
+
+/* ---------- Salon (galerie) ---------- */
+.salon-grille { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.salon-grille button { border: none; padding: 0; background: none; cursor: zoom-in; position: relative; color: var(--os); font: inherit; }
+.salon-grille img { width: 100%; aspect-ratio: 1; object-fit: cover; filter: saturate(.85); transition: filter .3s; }
+.salon-grille button:hover img { filter: saturate(1); }
+.salon-grille button:first-child { grid-column: span 2; grid-row: span 2; }
+.salon-grille figcaption {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 8px; font-size: .85rem; text-align: left;
+  background: linear-gradient(transparent, rgba(36,16,21,.85));
+}
+button:focus-visible { outline: 2px solid var(--or); outline-offset: 3px; }
+
+/* ---------- Pied ---------- */
+.adhesion { text-align: center; padding: 90px 16px 70px; border-top: 1px solid var(--filet); }
+.adhesion p.grand { font-family: var(--display); font-style: italic; font-size: clamp(1.3rem, 3vw, 1.8rem); margin: 0 auto 14px; max-width: 32ch; }
+.adhesion .adresse { color: var(--fumee); font-size: .95rem; }
+
+/* ---------- Visionneuse ---------- */
+#visionneuse { border: none; padding: 0; background: transparent; max-width: 94vw; max-height: 92vh; }
+#visionneuse::backdrop { background: rgba(20,8,11,.92); }
+#visionneuse img { max-width: 94vw; max-height: 84vh; }
+#visionneuse button {
+  display: block; margin: 12px auto 0; font: inherit; background: var(--or); color: var(--nuit);
+  border: none; padding: 7px 20px; cursor: pointer;
+}
+
+/* ---------- Cercle pas encore fondé ---------- */
+.ferme { min-height: 100vh; display: grid; place-items: center; text-align: center; padding: 16px; }
+.ferme p { font-family: var(--display); font-style: italic; font-size: 1.4rem; color: var(--fumee); }
+
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  section.bloc { padding: 56px 16px; }
+  .soiree { grid-template-columns: 64px 1fr; gap: 4px 16px; }
+  .soiree .jour { font-size: 2.5rem; }
+  .salon-grille { grid-template-columns: repeat(2, 1fr); }
+}
