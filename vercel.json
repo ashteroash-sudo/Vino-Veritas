@@ -3,7 +3,18 @@
   "headers": [
     {
       "source": "/(.*)\\.(js|css|html)",
-      "headers": [{ "key": "Cache-Control", "value": "no-cache, must-revalidate" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, must-revalidate"
+        }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/ping",
+      "schedule": "23 4 * * *"
     }
   ]
 }
