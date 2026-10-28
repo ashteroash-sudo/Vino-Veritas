@@ -363,7 +363,7 @@ async function vueFondation(cible) {
 }
 
 const ONGLETS_GERANT = [["compte", "Compte"], ["membres", "Membres"], ["personnel", "Personnel"], ["cave", "Cave"], ["amenagements", "Aménagements"], ["vitrine", "Vitrine"]];
-const LIBELLE_POSTE = { hote: "Hôte d'accueil", serveur: "Service en salle", barman: "Bar et sommellerie", portier: "Porte et sécurité" };
+const LIBELLE_POSTE = { hote: "Hôte d'accueil", serveur: "Service en salle", barman: "Bar et sommellerie", portier: "Porte et sécurité", administrateur: "Administration" };
 const jourHeure = (d) => new Date(d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) + " à 19 h";
 const portrait = (dossier, slug, nom) =>
   `<img src="img/${dossier}/${esc(slug)}.jpg" alt="Portrait de ${esc(nom)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'portrait-vide',textContent:'Pas de photographie'}))">`;
@@ -1477,7 +1477,7 @@ async function adminVitrine(boite, catalogue) {
 }
 
 /* ---------- Fiches du personnel (MJ) ---------- */
-const POSTES = { hote: "Hôtes et hôtesses d'accueil", serveur: "Serveurs et serveuses", barman: "Barmen et sommeliers", portier: "Portiers" };
+const POSTES = { hote: "Hôtes et hôtesses d'accueil", serveur: "Serveurs et serveuses", barman: "Barmen et sommeliers", portier: "Portiers", administrateur: "Administration" };
 const NIVEAUX = { 1: "Débutant", 2: "Confirmé", 3: "D'exception" };
 
 async function vuePersonnelMJ(cible) {
