@@ -867,6 +867,14 @@ async function ongletAmenagements(boite, c, actualiser) {
   const blocLocal = local ? `
     <h2>Le local</h2>
     <p>Vous êtes installé à <strong>${esc(local.titre)}</strong>, ${esc(local.adresse)} : ${local.capacite} invités au plus, ${dollars(local.loyer_hebdo)} de loyer par semaine.</p>
+    ${(() => {
+      const paliers = local.paliers || [];
+      const p = Math.min(Number(c.palier_visuel) || 0, paliers.length);
+      const photos = p > 0 ? paliers[p - 1].photos : local.photos || [];
+      const suivant = paliers[p];
+      return `${photos.length ? `<div class="local-actuel">${blocAnnonce({ ...local, photos }, false)}</div>` : ""}
+        ${paliers.length ? `<p class="clause-discrete">${p > 0 ? `Votre salle : « ${esc(paliers[p - 1].nom)} ». ` : ""}${suivant ? "Embellir le cercle (pièces, personnel, cave) transformera peu à peu la salle." : "La salle a atteint sa plus belle allure."}</p>` : ""}`;
+    })()}
     ${suivants.length ? `
       <p class="clause-discrete">${humeurLocal}</p>
       ${suivants.map((l) => `
