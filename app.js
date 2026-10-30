@@ -541,7 +541,7 @@ Pourquoi refuser quelqu'un ? Le salon a une capacité limitée et un cercle bond
 
 La cotisation décide de qui frappe à votre porte : trop chère, les bourses modestes renoncent ; trop modeste, les grandes fortunes jugent le cercle indigne d'elles. Mais elle ne suffit pas : les personnalités les plus en vue ne se présentent qu'à un cercle déjà réputé.
 
-Une fois admis, un membre peut vous rendre service grâce à ses relations. Et vous pouvez vous nourrir sur lui, à vos risques.`,
+Une fois admis, un membre peut vous rendre service grâce à ses relations. Et les nuits de chasse, vous pouvez vous nourrir sur lui, à vos risques.`,
   personnel: `Le personnel.
 
 Une agence vous transmet chaque semaine quelques dossiers. Un barman fait tourner le bar, des serveurs permettent d'accueillir du monde aux soirées, un hôte d'accueil fait venir les membres, un portier garde la porte.
@@ -983,15 +983,7 @@ async function ongletMembres(boite, c, actualiser) {
     else if (b.dataset.action === "accepter") r = await sb.rpc("repondre_candidat", { p_slug: slug, p_accepter: true });
     else if (b.dataset.action === "decliner") { if (!await demander(`Décliner la candidature de ${nom} ?`)) return; r = await sb.rpc("repondre_candidat", { p_slug: slug, p_accepter: false }); }
     else if (b.dataset.action === "exclure") { if (!await demander(`Exclure ${nom} du cercle ? Les autres membres le remarqueront, et il ne reviendra pas.`)) return; r = await sb.rpc("exclure_membre", { p_slug: slug }); }
-    else if (b.dataset.action === "nourrir") { if (!await demander(`Vous nourrir sur ${nom} ? Il ne pourra plus venir au cercle pendant deux semaines.`)) return; r = await sb.rpc("se_nourrir", { p_slug: slug }); }
     if (r?.error) { erreur.textContent = messageErreur(r.error); return; }
-    if (b.dataset.action === "nourrir") {
-      const { data: apres } = await sb.rpc("mes_membres");
-      const lui = apres?.find((x) => x.slug === slug);
-      informer(lui?.anemie
-        ? `Vous vous êtes nourri sur ${nom}. Il se sentira faible et ne viendra pas au cercle pendant deux semaines.`
-        : `Le sang de ${nom} ne passe pas : il ne correspond pas à ce que votre sang exige.`);
-    }
     if (b.dataset.action === "observer" && r?.data) informer(r.data);
     actualiser();
   };
@@ -1026,7 +1018,6 @@ function ficheMembre(m) {
         ${m.atout ? `<p><strong>Peut vous rendre service :</strong> ${esc(m.atout)}</p>` : ""}
         ${m.indices?.length ? `<ul class="indices">${m.indices.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
         <div class="actions">
-          ${m.anemie ? "" : `<button class="bouton-second" data-action="nourrir" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Se nourrir</button>`}
           <button class="lien-discret" data-action="exclure" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Exclure du cercle</button>
         </div>
       </div>
