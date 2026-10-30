@@ -567,8 +567,17 @@ En haut de cet onglet, le local. Celui de M. Vance est un point de départ : qua
 
 C'est la page publique de votre cercle, celle que verra quiconque en connaît l'adresse. Présentez l'esprit du cercle, annoncez vos soirées et mettez en avant vos bouteilles.
 
-Une soirée a un coût en alcool, débité au relevé, et un prix de participation que vous fixez : trop cher, les membres modestes restent chez eux. Les membres viennent plus volontiers quand le thème correspond à leurs goûts.`,
+Une soirée coûte de l'alcool, débité au relevé, mais les entrées vous reviennent : bien pensée, elle rapporte. Le prix est à vous de le fixer, selon votre clientèle : trop cher, les bourses modestes restent chez elles, et ceux qui viennent quand même le font en grinçant des dents. Un thème qui plaît attire plus de monde et laisse un bon souvenir.
+
+Le nombre de places dépend de votre salon et de vos serveurs. Et une semaine sans soirée, vos membres s'ennuient.`,
 };
+const ANNONCE_SOIREES = `Une note de la Maison sur vos soirées.
+
+Une soirée coûte de l'alcool, mais les entrées vous reviennent : bien pensée, elle rapporte. Le prix est à vous de le fixer, selon votre clientèle : trop cher, les bourses modestes restent chez elles, et ceux qui viennent quand même le font en grinçant des dents. Un thème qui plaît attire plus de monde et laisse un bon souvenir.
+
+Le nombre de places dépend de votre salon et de vos serveurs. Et une semaine sans soirée, vos membres s'ennuient.
+
+Pour mémoire : le bouton « ? », au bout de la rangée d'onglets, réaffiche à tout moment les explications de l'onglet ouvert.`;
 const BIENVENUE = `Bienvenue dans le registre de votre cercle.
 
 C'est ici que vous tenez le cercle, semaine après semaine : vous gérez son argent, choisissez ses membres et son personnel, commandez votre cave, aménagez le salon et annoncez vos soirées.
@@ -586,7 +595,8 @@ Chaque onglet s'explique la première fois que vous l'ouvrez ; le bouton « ? »
 function dejaVu(cle) { try { return localStorage.getItem(cle) === "1"; } catch { return false; } }
 function marquerVu(cle) { try { localStorage.setItem(cle, "1"); } catch {} }
 async function montrerAide(onglet, force = false) {
-  if (!force && !dejaVu("vv-bienvenue-2")) { marquerVu("vv-bienvenue-2"); await informer(BIENVENUE); }
+  if (!force && !dejaVu("vv-bienvenue-2")) { marquerVu("vv-bienvenue-2"); marquerVu("vv-annonce-soirees"); await informer(BIENVENUE); }
+  else if (!force && !dejaVu("vv-annonce-soirees")) { marquerVu("vv-annonce-soirees"); await informer(ANNONCE_SOIREES); }
   const cle = "vv-aide-" + onglet;
   if (dejaVu(cle) && !force) return;
   marquerVu(cle);
