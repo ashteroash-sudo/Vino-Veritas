@@ -63,6 +63,13 @@ async function afficher() {
         </button>`).join("")}</div>
     </section>` : ""}
 
+    ${(v.temoignages || []).length ? `
+    <section class="bloc" aria-labelledby="t-echos">
+      <h2 id="t-echos">Ils en parlent</h2>
+      <ul class="echos">${v.temoignages.map(blocTemoignage).join("")}</ul>
+      ${v.nb_temoignages > v.temoignages.length ? `<p class="passees">Et ${v.nb_temoignages - v.temoignages.length} autre${v.nb_temoignages - v.temoignages.length > 1 ? "s" : ""} mot${v.nb_temoignages - v.temoignages.length > 1 ? "s" : ""} laissé${v.nb_temoignages - v.temoignages.length > 1 ? "s" : ""} au registre du cercle.</p>` : ""}
+    </section>` : ""}
+
     <footer class="adhesion">
       <p class="grand">L'admission au cercle se fait sur cooptation uniquement.</p>
       ${v.local ? `<p class="adresse">${esc(v.local.titre)}, ${esc(v.local.adresse)}, Gary, Indiana</p>` : ""}
@@ -84,6 +91,16 @@ function blocSoiree(e) {
         ${e.description ? `<p>${esc(e.description)}</p>` : ""}
       </div>
       ${e.image ? `<button type="button" class="visuel" data-agrandir="${esc(urlImage(e.image))}" aria-label="Agrandir l'affiche"><img src="${esc(urlImage(e.image))}" alt="Affiche : ${esc(e.titre)}" loading="lazy"></button>` : ""}
+    </li>`;
+}
+
+function blocTemoignage(t) {
+  const etoiles = "★".repeat(t.note) + "☆".repeat(5 - t.note);
+  return `
+    <li class="echo">
+      <div class="echo-note" aria-label="${t.note} sur 5">${etoiles}</div>
+      <blockquote>${esc(t.texte)}</blockquote>
+      <div class="echo-auteur">${esc(t.auteur)}${t.qualite ? `, ${esc(t.qualite.charAt(0).toLowerCase() + t.qualite.slice(1))}` : ""}<span> · après « ${esc(t.soiree)} »</span></div>
     </li>`;
 }
 
