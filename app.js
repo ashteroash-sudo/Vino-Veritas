@@ -949,8 +949,12 @@ async function ongletAmenagements(boite, c, actualiser) {
 }
 
 async function ongletMembres(boite, c, actualiser) {
-  const { data: liste, error } = await sb.rpc("mes_membres");
+  const [{ data: liste, error }, { data: themes }] = await Promise.all([
+    sb.rpc("mes_membres"),
+    sb.from("themes_soiree").select("slug, nom"),
+  ]);
   if (error) throw error;
+  const nomTheme = Object.fromEntries((themes || []).map((t) => [t.slug, t.nom]));
   const candidats = liste.filter((m) => m.statut === "candidat");
   const membres = liste.filter((m) => m.statut === "membre");
   const chezVance = liste.filter((m) => m.statut === "vance");
@@ -1026,6 +1030,7 @@ function ficheMembre(m) {
         <div class="origine">${esc(m.metier)}. Humeur : ${esc(m.humeur)}${m.anemie ? ". Souffrant, absent pour le moment" : ""}</div>
         ${m.avertissement ? `<p class="secret">Semble sur le point de quitter le cercle.</p>` : ""}
         ${m.atout ? `<p><strong>Peut vous rendre service :</strong> ${esc(m.atout)}</p>` : ""}
+        ${m.statut === "membre" ? `<p><strong>Apprécie :</strong> ${(m.gouts_connus || []).length ? m.gouts_connus.map((g) => esc(nomTheme[g] || g)).join(", ") : `<span class="clause-discrete">vous ne savez pas encore ce qui lui plaît : vos soirées vous l'apprendront.</span>`}</p>` : ""}
         ${m.indices?.length ? `<ul class="indices">${m.indices.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
         <div class="actions">
           <button class="lien-discret" data-action="exclure" data-slug="${m.slug}" data-nom="${esc(m.nom)}">Exclure du cercle</button>
