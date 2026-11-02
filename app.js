@@ -1164,13 +1164,14 @@ async function vueMJ() {
       <div id="mj-vance"></div>
       <h2>Ligne exceptionnelle</h2>
       <form id="mj-ligne" class="sous-form">
-        <label for="l-libelle">Libellé (ce que verra le joueur)</label>
-        <input id="l-libelle" type="text" required placeholder="Ex. : Cargaison perdue sur la I-94">
+        <label for="l-libelle">Message ou libellé (ce que verra le joueur)</label>
+        <input id="l-libelle" type="text" required placeholder="Ex. : Cargaison perdue sur la I-94, ou un indice glissé à la joueuse">
         <div class="deux-col">
-          <div><label for="l-montant">Montant ($, négatif pour une dépense)</label><input id="l-montant" type="number" step="10" required></div>
+          <div><label for="l-montant">Montant ($, négatif pour une dépense)</label><input id="l-montant" type="number" step="10" placeholder="0"></div>
           <div><label><input id="l-visible" type="checkbox" checked> Visible par le joueur</label></div>
         </div>
-        <div class="actions"><button class="bouton" type="submit">Ajouter au relevé</button></div>
+        <p class="clause-discrete">Montant vide ou à 0 : simple message dans la correspondance, sans ligne au relevé. Avec un montant : l'argent est versé ou retiré tout de suite, et la ligne apparaît au relevé de mardi.</p>
+        <div class="actions"><button class="bouton" type="submit">Envoyer</button></div>
       </form>
       <h2>Dernier relevé${sem ? ` (semaine ${sem.numero})` : ""}</h2>
       ${sem ? `<p class="clause-discrete">Recettes ${dollars(sem.resume?.recettes)}, dépenses ${dollars(sem.resume?.depenses)}, résultat ${dollars(sem.resume?.resultat)}. Passages au bar : ${sem.resume?.passages_bar}. Membres : ${sem.resume?.membres}.</p>
@@ -1201,7 +1202,7 @@ async function vueMJ() {
   });
   cible.querySelector("#mj-ligne")?.addEventListener("submit", async (ev) => {
     ev.preventDefault(); const f = ev.target;
-    const { error } = await sb.rpc("mj_ligne", { p_libelle: f["l-libelle"].value.trim(), p_montant: Number(f["l-montant"].value), p_visible: f["l-visible"].checked });
+    const { error } = await sb.rpc("mj_ligne", { p_libelle: f["l-libelle"].value.trim(), p_montant: Number(f["l-montant"].value) || 0, p_visible: f["l-visible"].checked });
     if (error) return err(error);
     await chargerCercle(); vueMJ();
   });
